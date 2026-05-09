@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis:34165
+      - SCRAPE_TIMEOUT_MS=10000
+      - MAX_CONCURRENCY=20
+      - PORT=8080
+      - HOST=hoge.example.com
+    depends_on:
+      - redis
+  redis:
+    image: redis:alpine
+    command: redis-server --port 34165
+    ports:
+      - "34165:34165"
