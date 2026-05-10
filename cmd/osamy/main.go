@@ -17,7 +17,7 @@ import (
 
 func main() {
 	redisUrl := os.Getenv("REDIS_URL")
-	if redisUrl == ""  {
+	if redisUrl == "" {
 		redisUrl = "localhost:34165"
 	}
 
@@ -34,7 +34,7 @@ func main() {
 		log.Printf("Redis connection failed, fallback to in-memory cache: %v", pingError)
 		cacheRepository = infrastructure.NewInMemoryCacheRepository(24 * time.Hour)
 	} else {
-		cacheRepository = infrastructure.NewRedisCacheRepository(redisClient, 24 * time.Hour)
+		cacheRepository = infrastructure.NewRedisCacheRepository(redisClient, 24*time.Hour)
 	}
 
 	scrapeTimeoutMs, parseError := strconv.Atoi(os.Getenv("SCRAPE_TIMEOUT_MS"))
@@ -87,8 +87,16 @@ func main() {
 	}
 
 	address := host + ":" + port
+	server := &http.Server{
+		Addr:              address,
+		Handler:           nil,
+		ReadTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	log.Printf("Server starting on %s", address)
-	if listenError := http.ListenAndServe(address, nil); listenError != nil {
+	if listenError := server.ListenAndServe(); listenError != nil {
 		log.Fatalf("Server failed: %v", listenError)
 	}
 }
