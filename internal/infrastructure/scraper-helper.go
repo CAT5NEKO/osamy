@@ -206,3 +206,38 @@ func extractFilenameFromContentDisposition(contentDisposition string) string {
 
 	return ""
 }
+
+func IsEmptyPreview(summary *domain.PageSummary) bool {
+	if summary == nil {
+		return true
+	}
+	if strings.TrimSpace(summary.Title) != "" {
+		return false
+	}
+	if strings.TrimSpace(summary.Description) != "" {
+		return false
+	}
+	if strings.TrimSpace(summary.Thumbnail) != "" {
+		return false
+	}
+	if strings.TrimSpace(summary.Icon) != "" {
+		return false
+	}
+	if strings.TrimSpace(summary.SiteName) != "" {
+		return false
+	}
+	if strings.TrimSpace(summary.Sitename) != "" {
+		return false
+	}
+	if len(summary.Medias) > 0 {
+		for _, media := range summary.Medias {
+			if strings.TrimSpace(media) != "" {
+				return false
+			}
+		}
+	}
+	if summary.Player != nil && strings.TrimSpace(summary.Player.Url) != "" {
+		return false
+	}
+	return true
+}

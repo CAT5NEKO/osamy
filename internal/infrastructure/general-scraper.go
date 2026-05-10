@@ -146,6 +146,9 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	}
 
 	pageSummary.Finalize()
+	if IsEmptyPreview(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }
 
