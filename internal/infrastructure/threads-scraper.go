@@ -49,7 +49,7 @@ func (scraper *ThreadsScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	request.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
 
-	response, fetchError := scraper.webFetcher.httpClient.Do(request)
+	response, fetchError := scraper.webFetcher.Do(request)
 	if fetchError != nil {
 		return nil, fetchError
 	}

@@ -66,3 +66,7 @@ func (fetcher *WebFetcher) FetchAsBot(ctx context.Context, url string) (*http.Re
 
 	return response, nil
 }
+
+func (fetcher *WebFetcher) Do(request *http.Request) (*http.Response, error) {
+	return fetcher.httpClient.Do(request)
+}

@@ -90,7 +90,7 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 	request.Header.Set("Sec-Fetch-Mode", "cors")
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
 
-	response, fetchError := scraper.webFetcher.httpClient.Do(request)
+	response, fetchError := scraper.webFetcher.Do(request)
 	if fetchError != nil {
 		return nil, fetchError
 	}
