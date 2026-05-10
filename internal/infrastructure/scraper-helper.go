@@ -26,6 +26,7 @@ const (
 	ContentKindHTML        ContentKind = "html"
 	ContentKindPDF         ContentKind = "pdf"
 	ContentKindSpreadsheet ContentKind = "spreadsheet"
+	ContentKindWord        ContentKind = "word"
 )
 
 func StripHtmlTags(input string) string {
@@ -85,6 +86,8 @@ func DetectContentKind(response *http.Response, targetURL string) ContentKind {
 		return ContentKindPDF
 	case "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
 		return ContentKindSpreadsheet
+	case "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return ContentKindWord
 	}
 
 	extension := extractFileExtension(targetURL, response)
@@ -93,6 +96,8 @@ func DetectContentKind(response *http.Response, targetURL string) ContentKind {
 		return ContentKindPDF
 	case ".xls", ".xlsx":
 		return ContentKindSpreadsheet
+	case ".doc", ".docx":
+		return ContentKindWord
 	default:
 		return ContentKindHTML
 	}
@@ -103,9 +108,6 @@ func BuildFilePreviewSummary(targetURL string, response *http.Response) *domain.
 	pageSummary.SetTitle(resolveFileTitle(targetURL, response))
 	pageSummary.SetDescription(resolveFileDescription(response))
 	pageSummary.SetSiteName(resolveFileSiteName(targetURL, response))
-	previewIcon := resolveFileIcon(targetURL, response)
-	pageSummary.SetIcon(previewIcon)
-	pageSummary.SetThumbnail(previewIcon)
 	pageSummary.Finalize()
 	return pageSummary
 }
@@ -145,17 +147,6 @@ func resolveFileSiteName(targetURL string, response *http.Response) string {
 		return ""
 	}
 	return parsedURL.Hostname()
-}
-
-func resolveFileIcon(targetURL string, response *http.Response) string {
-	parsedURL := resolveURLForFile(targetURL, response)
-	if parsedURL == nil {
-		return ""
-	}
-	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return ""
-	}
-	return parsedURL.Scheme + "://" + parsedURL.Host + "/favicon.ico"
 }
 
 func resolveURLForFile(targetURL string, response *http.Response) *url.URL {

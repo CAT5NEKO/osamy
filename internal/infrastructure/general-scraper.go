@@ -64,7 +64,7 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	defer response.Body.Close()
 
 	contentKind := DetectContentKind(response, targetUrl)
-	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet {
+	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet || contentKind == ContentKindWord {
 		return BuildFilePreviewSummary(targetUrl, response), nil
 	}
 
