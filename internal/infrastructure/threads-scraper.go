@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -58,7 +57,7 @@ func (scraper *ThreadsScraper) Scrape(ctx context.Context, targetUrl string) (*d
 
 	finalUrl := response.Request.URL.String()
 
-	document, parseError := goquery.NewDocumentFromReader(io.LimitReader(response.Body, MaxFetchResponseBodySize))
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}

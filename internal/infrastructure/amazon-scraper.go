@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -42,7 +41,7 @@ func (scraper *AmazonScraper) Scrape(ctx context.Context, targetUrl string) (*do
 	}
 	defer response.Body.Close()
 
-	document, parseError := goquery.NewDocumentFromReader(response.Body)
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}

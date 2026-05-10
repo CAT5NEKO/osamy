@@ -39,7 +39,7 @@ func (scraper *BlueskyScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	}
 	defer response.Body.Close()
 
-	document, parseError := goquery.NewDocumentFromReader(response.Body)
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}

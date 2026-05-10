@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -101,7 +100,7 @@ func (scraper *SpotifyScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	response, fetchError := scraper.webFetcher.Fetch(ctx, embedFetchURL)
 	if fetchError == nil {
 		defer response.Body.Close()
-		document, err := goquery.NewDocumentFromReader(response.Body)
+		document, err := BuildDocumentFromResponse(response)
 		if err == nil {
 			nextDataStr := document.Find("#__NEXT_DATA__").Text()
 			if nextDataStr != "" {

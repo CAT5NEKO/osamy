@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -146,7 +145,7 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 	}
 	defer response.Body.Close()
 
-	document, parseError := goquery.NewDocumentFromReader(response.Body)
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}

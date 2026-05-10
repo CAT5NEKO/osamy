@@ -63,7 +63,12 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	}
 	defer response.Body.Close()
 
-	document, parseError := goquery.NewDocumentFromReader(response.Body)
+	contentKind := DetectContentKind(response, targetUrl)
+	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet {
+		return BuildFilePreviewSummary(targetUrl, response), nil
+	}
+
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}

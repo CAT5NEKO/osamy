@@ -42,7 +42,7 @@ func (scraper *NicoNicoScraper) Scrape(ctx context.Context, targetUrl string) (*
 	}
 	defer response.Body.Close()
 
-	document, parseError := goquery.NewDocumentFromReader(response.Body)
+	document, parseError := BuildDocumentFromResponse(response)
 	if parseError != nil {
 		return nil, parseError
 	}
