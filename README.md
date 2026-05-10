@@ -1,17 +1,22 @@
 # osamy
 
-Misskey向けのリンクプレビューを返すやつ
+Misskey向けのリンクプレビューを返すやつです。  
+Misskeyには内臓のサマリープロキシがあるので、単体で動作可能ですが、  
+負荷分散したい、独立して稼働させたいなどのユースケースでご活用いただけます。  
 
 ### 特徴
 
-- 特定サイトは専用スクレイパー、その他は汎用スクレイパーで処理する。
-- デフォではRedisを使ったキャッシュを行い、失敗時はメモリにフォールバックする。
+- 特定サイトは専用スクレイパー、その他は汎用スクレイパーで処理します。
+  - 通常サイト、埋め込みコンテンツが伴う一部のサイト（Twitter,Bluesky,Threads,Spotify,Youtube etc）、オフィスドキュメント(PDF,Word,Excelファイル)をプレビュー表示可能です。 
+- デフォではRedisを使ったキャッシュを行い、失敗時はメモリにフォールバックします。  
+  - Redisのキャッシュ時間は24時間です。
 
 ### エンドポイント
 
-GET /?url={URL}
+GET /?url={URL} : プレビュー向けコンテンツに変換 (title, description, thumbnail, siteName, url, medias, player などを含むJSONを返す。)
 
-title, description, thumbnail, siteName, url, medias, player などを含むJSONを返す。
+GET /health : 動作確認用
+
 
 ### 導入方法
 
