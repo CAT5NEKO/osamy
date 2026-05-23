@@ -2,7 +2,9 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"runtime/debug"
 
 	"github.com/user/osamy/internal/domain"
 )
@@ -35,7 +37,7 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, url st
 
 	for _, scraper := range service.scrapers {
 		if scraper.CanHandle(url) {
-			scrapedSummary, scrapeError := scraper.Scrape(ctx, url)
+			scrapedSummary, scrapeError := safeScrape(scraper, ctx, url)
 			if scrapeError != nil {
 				log.Printf("Scraper failed for %s: %v", url, scrapeError)
 				return nil, nil
@@ -48,4 +50,17 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, url st
 	}
 
 	return nil, nil
+}
+
+func safeScrape(scraper domain.ScraperDriver, ctx context.Context, url string) (summary *domain.PageSummary, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("Scraper panic for %s: %v", url, recovered)
+			log.Printf("Scraper panic stack: %s", string(debug.Stack()))
+			err = fmt.Errorf("scraper panic: %v", recovered)
+			summary = nil
+		}
+	}()
+
+	return scraper.Scrape(ctx, url)
 }

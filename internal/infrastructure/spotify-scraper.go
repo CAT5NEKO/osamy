@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/user/osamy/internal/domain"
 )
@@ -55,6 +56,9 @@ func (scraper *SpotifyScraper) CanHandle(targetUrl string) bool {
 }
 
 func (scraper *SpotifyScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	kind, id, parseError := parseSpotifyContent(targetUrl)
 	if parseError != nil {
 		return nil, parseError
@@ -70,7 +74,7 @@ func (scraper *SpotifyScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	pageSummary.SetPlayerAllow([]string{"autoplay", "clipboard-write", "encrypted-media", "fullscreen", "picture-in-picture"})
 
 	embedFetchURL := fmt.Sprintf("%s/%s/%s", spotifyEmbedBaseURL, kind, id)
-	response, fetchError := scraper.webFetcher.Fetch(ctx, embedFetchURL)
+	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, embedFetchURL)
 	if fetchError == nil {
 		defer response.Body.Close()
 		updateSpotifySummary(pageSummary, response)

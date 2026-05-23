@@ -166,7 +166,7 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 	if image == "" {
 		image = document.Find("meta[property='og:image']").AttrOr("content", "")
 	}
-	pageSummary.SetThumbnail(image)
+	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, image))
 
 	pageSummary.SetIcon("https://www.nitori-net.jp/favicon.ico")
 

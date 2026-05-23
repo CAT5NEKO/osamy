@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"time"
@@ -16,15 +17,15 @@ import (
 )
 
 func main() {
-	redisUrl := os.Getenv("REDIS_URL")
-	if redisUrl == "" {
-		redisUrl = "localhost:34165"
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "localhost:34165"
 	}
 
 	var cacheRepository domain.CacheRepository
 
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisUrl,
+		Addr: redisURL,
 	})
 
 	pingContext, cancelPing := context.WithTimeout(context.Background(), 2*time.Second)
@@ -73,8 +74,9 @@ func main() {
 
 	rateLimiter := interfaces.NewRateLimiter(60, 1*time.Minute)
 
-	http.Handle("/", rateLimiter.Middleware(summaryHandler))
-	http.Handle("/health", healthHandler)
+	mux := http.NewServeMux()
+	mux.Handle("/", rateLimiter.Middleware(summaryHandler))
+	mux.Handle("/health", healthHandler)
 
 	host := os.Getenv("HOST")
 	if host == "" {
@@ -87,9 +89,23 @@ func main() {
 	}
 
 	address := host + ":" + port
+	pprofAddr := os.Getenv("PPROF_ADDR")
+	if pprofAddr != "" {
+		go func() {
+			pprofServer := &http.Server{
+				Addr:              pprofAddr,
+				Handler:           http.DefaultServeMux,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			if listenError := pprofServer.ListenAndServe(); listenError != nil {
+				log.Printf("pprof server stopped: %v", listenError)
+			}
+		}()
+	}
+
 	server := &http.Server{
 		Addr:              address,
-		Handler:           nil,
+		Handler:           mux,
 		ReadTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 60 * time.Second,
 		WriteTimeout:      60 * time.Second,

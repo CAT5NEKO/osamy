@@ -100,10 +100,28 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 
 	thumbnail := scraper.extractMeta(document, "property", "og:image")
 	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "property", "og:image:secure_url")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "property", "og:image:url")
+	}
+	if thumbnail == "" {
 		thumbnail = scraper.extractMeta(document, "name", "twitter:image")
 	}
 	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "name", "twitter:image:src")
+	}
+	if thumbnail == "" {
 		thumbnail = scraper.extractMeta(document, "property", "twitter:image")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "itemprop", "image")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractLink(document, "image_src")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "name", "thumbnail")
 	}
 	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, thumbnail))
 
@@ -119,9 +137,9 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	}
 	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, icon))
 
-	videoUrl := scraper.extractMeta(document, "property", "og:video:url")
-	if videoUrl == "" {
-		videoUrl = scraper.extractMeta(document, "property", "og:video")
+	videoURL := scraper.extractMeta(document, "property", "og:video:url")
+	if videoURL == "" {
+		videoURL = scraper.extractMeta(document, "property", "og:video")
 	}
 
 	twitterCard := scraper.extractMeta(document, "name", "twitter:card")
@@ -129,20 +147,20 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		twitterCard = scraper.extractMeta(document, "property", "twitter:card")
 	}
 
-	if videoUrl == "" && twitterCard != "summary_large_image" {
-		videoUrl = scraper.extractMeta(document, "name", "twitter:player:stream")
-		if videoUrl == "" {
-			videoUrl = scraper.extractMeta(document, "property", "twitter:player:stream")
+	if videoURL == "" && twitterCard != "summary_large_image" {
+		videoURL = scraper.extractMeta(document, "name", "twitter:player:stream")
+		if videoURL == "" {
+			videoURL = scraper.extractMeta(document, "property", "twitter:player:stream")
 		}
-		if videoUrl == "" {
-			videoUrl = scraper.extractMeta(document, "name", "twitter:player")
+		if videoURL == "" {
+			videoURL = scraper.extractMeta(document, "name", "twitter:player")
 		}
-		if videoUrl == "" {
-			videoUrl = scraper.extractMeta(document, "property", "twitter:player")
+		if videoURL == "" {
+			videoURL = scraper.extractMeta(document, "property", "twitter:player")
 		}
 	}
-	if strings.TrimSpace(videoUrl) != "" {
-		pageSummary.SetPlayer(videoUrl, 0, 0)
+	if strings.TrimSpace(videoURL) != "" {
+		pageSummary.SetPlayer(videoURL, 0, 0)
 	}
 
 	pageSummary.Finalize()
