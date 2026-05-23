@@ -34,6 +34,7 @@ func TestGeneralScraperImageExtractionVariants(t *testing.T) {
 		expected func(base string) string
 	}{
 		{name: "og_image_secure.html", expected: func(_ string) string { return "https://cdn.example.com/secure.jpg" }},
+		{name: "og_image_name.html", expected: func(_ string) string { return "https://cdn.example.com/og-name.jpg" }},
 		{name: "twitter_image_src.html", expected: func(_ string) string { return "https://cdn.example.com/twitter-src.jpg" }},
 		{name: "jsonld_image.html", expected: func(_ string) string { return "https://cdn.example.com/jsonld.jpg" }},
 		{name: "itemprop_image.html", expected: func(base string) string { return base + "/images/itemprop.jpg" }},
@@ -72,6 +73,50 @@ func TestGeneralScraperImageExtractionVariants(t *testing.T) {
 		expected := fixture.expected(server.URL)
 		if summary.Thumbnail != expected {
 			t.Fatalf("unexpected thumbnail for %s: got %s want %s", fixture.name, summary.Thumbnail, expected)
+		}
+	}
+}
+
+func TestGeneralScraperIconFallbacks(t *testing.T) {
+	fixtures := []struct {
+		name     string
+		expected func(base string) string
+	}{
+		{name: "icon_apple_touch.html", expected: func(base string) string { return base + "/icons/apple-touch.png" }},
+		{name: "icon_rel_contains.html", expected: func(_ string) string { return "https://cdn.example.com/favicon.ico" }},
+	}
+
+	fixtureBodies := map[string]string{}
+	for _, fixture := range fixtures {
+		fixtureBodies[fixture.name] = loadFixture(t, fixture.name)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		name := strings.TrimPrefix(request.URL.Path, "/")
+		body, ok := fixtureBodies[name]
+		if !ok {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(writer, body)
+	}))
+	defer server.Close()
+
+	scraper := NewGeneralScraper(newTestWebFetcher())
+
+	for _, fixture := range fixtures {
+		targetURL := server.URL + "/" + fixture.name
+		summary, err := scraper.Scrape(context.Background(), targetURL)
+		if err != nil {
+			t.Fatalf("scrape failed for %s: %v", fixture.name, err)
+		}
+		if summary == nil {
+			t.Fatalf("summary is nil for %s", fixture.name)
+		}
+		expected := fixture.expected(server.URL)
+		if summary.Icon != expected {
+			t.Fatalf("unexpected icon for %s: got %s want %s", fixture.name, summary.Icon, expected)
 		}
 	}
 }

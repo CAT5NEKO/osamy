@@ -114,6 +114,15 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 		thumbnail = scraper.extractMeta(document, "property", "og:image:url")
 	}
 	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "name", "og:image")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "name", "og:image:secure_url")
+	}
+	if thumbnail == "" {
+		thumbnail = scraper.extractMeta(document, "name", "og:image:url")
+	}
+	if thumbnail == "" {
 		thumbnail = scraper.extractMeta(document, "name", "twitter:image")
 	}
 	if thumbnail == "" {
@@ -142,10 +151,7 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 	}
 	pageSummary.SetSiteName(siteName)
 
-	icon := scraper.extractLink(document, "icon")
-	if icon == "" {
-		icon = scraper.extractLink(document, "shortcut icon")
-	}
+	icon := scraper.extractIcon(document)
 	pageSummary.SetIcon(ResolveRelativeUrl(targetURL, icon))
 
 	videoURL := scraper.extractMeta(document, "property", "og:video:url")
@@ -182,13 +188,54 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 }
 
 func (scraper *GeneralScraper) extractMeta(document *goquery.Document, attributeName, attributeValue string) string {
-	selection := document.Find("meta[" + attributeName + "=\"" + attributeValue + "\"]")
-	return selection.AttrOr("content", "")
+	value := ""
+	document.Find("meta["+attributeName+"=\""+attributeValue+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		content := strings.TrimSpace(selection.AttrOr("content", ""))
+		if content == "" {
+			return true
+		}
+		value = content
+		return false
+	})
+	return value
 }
 
 func (scraper *GeneralScraper) extractLink(document *goquery.Document, relationship string) string {
-	selection := document.Find("link[rel=\"" + relationship + "\"]")
-	return selection.AttrOr("href", "")
+	value := ""
+	document.Find("link[rel=\""+relationship+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return true
+		}
+		value = href
+		return false
+	})
+	return value
+}
+
+func (scraper *GeneralScraper) extractIcon(document *goquery.Document) string {
+	rels := []string{"icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"}
+	for _, rel := range rels {
+		icon := scraper.extractLink(document, rel)
+		if icon != "" {
+			return icon
+		}
+	}
+
+	icon := ""
+	document.Find("link[rel]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		rel := strings.ToLower(selection.AttrOr("rel", ""))
+		if rel == "" || !strings.Contains(rel, "icon") {
+			return true
+		}
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return true
+		}
+		icon = href
+		return false
+	})
+	return icon
 }
 
 func shouldRetryWithBot(response *http.Response) bool {
