@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"time"
@@ -90,17 +89,9 @@ func main() {
 
 	address := host + ":" + port
 	pprofAddr := os.Getenv("PPROF_ADDR")
-	if pprofAddr != "" {
-		go func() {
-			pprofServer := &http.Server{
-				Addr:              pprofAddr,
-				Handler:           http.DefaultServeMux,
-				ReadHeaderTimeout: 5 * time.Second,
-			}
-			if listenError := pprofServer.ListenAndServe(); listenError != nil {
-				log.Printf("pprof server stopped: %v", listenError)
-			}
-		}()
+	pprofServer, startError := infrastructure.StartPprofServer(pprofAddr)
+	if startError != nil {
+		log.Printf("pprof server stopped: %v", startError)
 	}
 
 	server := &http.Server{
@@ -114,5 +105,8 @@ func main() {
 	log.Printf("Server starting on %s", address)
 	if listenError := server.ListenAndServe(); listenError != nil {
 		log.Fatalf("Server failed: %v", listenError)
+	}
+	if pprofServer != nil {
+		_ = pprofServer.Close()
 	}
 }

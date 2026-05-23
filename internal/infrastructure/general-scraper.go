@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,31 +22,31 @@ func NewGeneralScraper(webFetcher *WebFetcher) *GeneralScraper {
 	}
 }
 
-func (scraper *GeneralScraper) CanHandle(targetUrl string) bool {
+func (scraper *GeneralScraper) CanHandle(targetURL string) bool {
 	return true
 }
 
-func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fetchUrl := targetUrl
+	fetchURL := targetURL
 	useBotUserAgent := false
 
-	parsedUrl, err := url.Parse(fetchUrl)
+	parsedURL, err := url.Parse(fetchURL)
 	if err == nil {
-		hostname := strings.ToLower(parsedUrl.Hostname())
+		hostname := strings.ToLower(parsedURL.Hostname())
 		if hostname == "instagram.com" || hostname == "www.instagram.com" {
-			parsedUrl.Host = "ddinstagram.com"
-			fetchUrl = parsedUrl.String()
+			parsedURL.Host = "ddinstagram.com"
+			fetchURL = parsedURL.String()
 			useBotUserAgent = true
 		} else if hostname == "tiktok.com" || hostname == "www.tiktok.com" {
-			parsedUrl.Host = "vxtiktok.com"
-			fetchUrl = parsedUrl.String()
+			parsedURL.Host = "vxtiktok.com"
+			fetchURL = parsedURL.String()
 			useBotUserAgent = true
 		} else if hostname == "pixiv.net" || hostname == "www.pixiv.net" {
-			parsedUrl.Host = "phixiv.net"
-			fetchUrl = parsedUrl.String()
+			parsedURL.Host = "phixiv.net"
+			fetchURL = parsedURL.String()
 			useBotUserAgent = true
 		}
 	}
@@ -53,19 +54,26 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	var response *http.Response
 	var fetchError error
 	if useBotUserAgent {
-		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchUrl)
+		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
 	} else {
-		response, fetchError = scraper.webFetcher.Fetch(scrapeCtx, fetchUrl)
+		response, fetchError = scraper.webFetcher.Fetch(scrapeCtx, fetchURL)
 	}
 
 	if fetchError != nil {
 		return nil, fetchError
 	}
+	if !useBotUserAgent && shouldRetryWithBot(response) {
+		response.Body.Close()
+		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
+		if fetchError != nil {
+			return nil, fetchError
+		}
+	}
 	defer response.Body.Close()
 
-	contentKind := DetectContentKind(response, targetUrl)
+	contentKind := DetectContentKind(response, targetURL)
 	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet || contentKind == ContentKindWord {
-		return BuildFilePreviewSummary(targetUrl, response), nil
+		return BuildFilePreviewSummary(targetURL, response), nil
 	}
 
 	document, parseError := BuildDocumentFromResponse(response)
@@ -73,7 +81,7 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(targetURL)
 	title := scraper.extractMeta(document, "property", "og:title")
 	if title == "" {
 		title = scraper.extractMeta(document, "name", "twitter:title")
@@ -123,7 +131,10 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	if thumbnail == "" {
 		thumbnail = scraper.extractMeta(document, "name", "thumbnail")
 	}
-	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, thumbnail))
+	if thumbnail == "" {
+		thumbnail = scraper.extractImageFromJSONLD(document)
+	}
+	pageSummary.SetThumbnail(ResolveRelativeUrl(targetURL, thumbnail))
 
 	siteName := scraper.extractMeta(document, "property", "og:site_name")
 	if siteName == "ddinstagram" {
@@ -135,7 +146,7 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	if icon == "" {
 		icon = scraper.extractLink(document, "shortcut icon")
 	}
-	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, icon))
+	pageSummary.SetIcon(ResolveRelativeUrl(targetURL, icon))
 
 	videoURL := scraper.extractMeta(document, "property", "og:video:url")
 	if videoURL == "" {
@@ -178,4 +189,103 @@ func (scraper *GeneralScraper) extractMeta(document *goquery.Document, attribute
 func (scraper *GeneralScraper) extractLink(document *goquery.Document, relationship string) string {
 	selection := document.Find("link[rel=\"" + relationship + "\"]")
 	return selection.AttrOr("href", "")
+}
+
+func shouldRetryWithBot(response *http.Response) bool {
+	if response == nil {
+		return false
+	}
+	switch response.StatusCode {
+	case http.StatusForbidden, http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+func (scraper *GeneralScraper) extractImageFromJSONLD(document *goquery.Document) string {
+	imageURL := ""
+	document.Find("script[type=\"application/ld+json\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		payload := strings.TrimSpace(selection.Text())
+		if payload == "" {
+			return true
+		}
+		decoder := json.NewDecoder(strings.NewReader(payload))
+		decoder.UseNumber()
+		var value interface{}
+		if err := decoder.Decode(&value); err != nil {
+			return true
+		}
+		imageURL = findImageInJSONLD(value)
+		return imageURL == ""
+	})
+	return imageURL
+}
+
+func findImageInJSONLD(value interface{}) string {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if imageValue, ok := typed["image"]; ok {
+			if url := extractImageValue(imageValue); url != "" {
+				return url
+			}
+		}
+		if imageValue, ok := typed["thumbnailUrl"]; ok {
+			if url := extractImageValue(imageValue); url != "" {
+				return url
+			}
+		}
+		if imageValue, ok := typed["logo"]; ok {
+			if url := extractImageValue(imageValue); url != "" {
+				return url
+			}
+		}
+		if graphValue, ok := typed["@graph"]; ok {
+			if url := findImageInJSONLD(graphValue); url != "" {
+				return url
+			}
+		}
+		for _, nested := range typed {
+			if url := findImageInJSONLD(nested); url != "" {
+				return url
+			}
+		}
+	case []interface{}:
+		for _, item := range typed {
+			if url := findImageInJSONLD(item); url != "" {
+				return url
+			}
+		}
+	case string:
+		if strings.TrimSpace(typed) != "" {
+			return typed
+		}
+	}
+
+	return ""
+}
+
+func extractImageValue(value interface{}) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]interface{}:
+		if url, ok := typed["url"].(string); ok {
+			return url
+		}
+		if url, ok := typed["contentUrl"].(string); ok {
+			return url
+		}
+		if url, ok := typed["thumbnailUrl"].(string); ok {
+			return url
+		}
+		return findImageInJSONLD(typed)
+	case []interface{}:
+		for _, item := range typed {
+			if url := extractImageValue(item); url != "" {
+				return url
+			}
+		}
+	}
+	return ""
 }

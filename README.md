@@ -17,6 +17,14 @@ GET /?url={URL} : プレビュー向けコンテンツに変換 (title, descript
 
 GET /health : 動作確認用
 
+### プロファイリング
+
+`PPROF_ADDR` を設定すると pprof サーバーが起動します。例: `PPROF_ADDR=:6060`
+Dockerファイルではポートの指定が必要です。`"6060:6060"`
+
+- Heap: `go tool pprof http://localhost:6060/debug/pprof/heap`
+- Goroutine: `go tool pprof http://localhost:6060/debug/pprof/goroutine`
+
 
 ### 導入方法
 
