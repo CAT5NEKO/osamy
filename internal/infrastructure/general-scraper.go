@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -30,26 +29,12 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fetchURL := targetURL
-	useBotUserAgent := false
-
-	parsedURL, err := url.Parse(fetchURL)
-	if err == nil {
-		hostname := strings.ToLower(parsedURL.Hostname())
-		if hostname == "instagram.com" || hostname == "www.instagram.com" {
-			parsedURL.Host = "ddinstagram.com"
-			fetchURL = parsedURL.String()
-			useBotUserAgent = true
-		} else if hostname == "tiktok.com" || hostname == "www.tiktok.com" {
-			parsedURL.Host = "vxtiktok.com"
-			fetchURL = parsedURL.String()
-			useBotUserAgent = true
-		} else if hostname == "pixiv.net" || hostname == "www.pixiv.net" {
-			parsedURL.Host = "phixiv.net"
-			fetchURL = parsedURL.String()
-			useBotUserAgent = true
-		}
+	scrapeTarget, err := domain.NewScrapeTarget(targetURL)
+	if err != nil {
+		return nil, err
 	}
+
+	fetchURL, useBotUserAgent := scraper.resolveFetchParameters(scrapeTarget)
 
 	var response *http.Response
 	var fetchError error
@@ -336,3 +321,20 @@ func extractImageValue(value interface{}) string {
 	}
 	return ""
 }
+
+func (scraper *GeneralScraper) resolveFetchParameters(target *domain.ScrapeTarget) (string, bool) {
+	if target.IsInstagram() {
+		return target.ReplaceHost("ddinstagram.com"), true
+	}
+	if target.IsTikTok() {
+		return target.ReplaceHost("vxtiktok.com"), true
+	}
+	if target.IsPixiv() {
+		return target.ReplaceHost("phixiv.net"), true
+	}
+	if target.IsGoogleMaps() {
+		return target.RawURL(), true
+	}
+	return target.RawURL(), false
+}
+
