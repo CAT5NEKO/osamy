@@ -244,3 +244,29 @@ func IsEmptyPreview(summary *domain.PageSummary) bool {
 	}
 	return true
 }
+
+func ExtractMeta(document *goquery.Document, attributeName, attributeValue string) string {
+	value := ""
+	document.Find("meta["+attributeName+"=\""+attributeValue+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		content := strings.TrimSpace(selection.AttrOr("content", ""))
+		if content == "" {
+			return true
+		}
+		value = content
+		return false
+	})
+	return value
+}
+
+func ExtractLink(document *goquery.Document, relationship string) string {
+	value := ""
+	document.Find("link[rel=\""+relationship+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return true
+		}
+		value = href
+		return false
+	})
+	return value
+}

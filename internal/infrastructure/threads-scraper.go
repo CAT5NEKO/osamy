@@ -3,11 +3,8 @@ package infrastructure
 import (
 	"context"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -21,25 +18,15 @@ func NewThreadsScraper(webFetcher *WebFetcher) *ThreadsScraper {
 	}
 }
 
-func (scraper *ThreadsScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	hostname := strings.ToLower(parsedUrl.Hostname())
-	return hostname == "threads.net" || hostname == "www.threads.net" || hostname == "threads.com" || hostname == "www.threads.com"
+func (scraper *ThreadsScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsThreads()
 }
 
-func (scraper *ThreadsScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *ThreadsScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fetchUrl := targetUrl
-	parsed, _ := url.Parse(fetchUrl)
-	if parsed != nil && strings.HasSuffix(parsed.Hostname(), "threads.com") {
-		parsed.Host = strings.Replace(parsed.Host, "threads.com", "threads.net", 1)
-		fetchUrl = parsed.String()
-	}
+	fetchUrl := target.ReplaceHostSuffix("threads.com", "threads.net")
 
 	request, requestError := http.NewRequestWithContext(scrapeCtx, "GET", fetchUrl, nil)
 	if requestError != nil {
@@ -62,34 +49,34 @@ func (scraper *ThreadsScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		return nil, parseError
 	}
 
-	canonicalUrl := scraper.extractMeta(document, "property", "og:url")
+	canonicalUrl := ExtractMeta(document, "property", "og:url")
 	if canonicalUrl == "" {
 		canonicalUrl = finalUrl
 	}
 
 	pageSummary := domain.NewPageSummary(canonicalUrl)
 
-	title := scraper.extractMeta(document, "property", "og:title")
+	title := ExtractMeta(document, "property", "og:title")
 	if title == "" {
 		title = document.Find("title").Text()
 	}
 	pageSummary.SetTitle(title)
 
-	description := scraper.extractMeta(document, "property", "og:description")
+	description := ExtractMeta(document, "property", "og:description")
 	if description == "" {
-		description = scraper.extractMeta(document, "name", "description")
+		description = ExtractMeta(document, "name", "description")
 	}
 	pageSummary.SetDescription(description)
 
-	thumbnail := scraper.extractMeta(document, "property", "og:image")
+	thumbnail := ExtractMeta(document, "property", "og:image")
 	pageSummary.SetThumbnail(ResolveRelativeUrl(canonicalUrl, thumbnail))
 
 	pageSummary.SetSiteName("Threads")
 	pageSummary.SetIcon("https://static.cdninstagram.com/rsrc.php/ye/r/lEu8iVizmNW.ico")
 
-	videoUrl := scraper.extractMeta(document, "property", "og:video:url")
+	videoUrl := ExtractMeta(document, "property", "og:video:url")
 	if videoUrl == "" {
-		videoUrl = scraper.extractMeta(document, "property", "og:video")
+		videoUrl = ExtractMeta(document, "property", "og:video")
 	}
 	if videoUrl != "" {
 		pageSummary.SetPlayer(videoUrl, 600, 338)
@@ -97,9 +84,4 @@ func (scraper *ThreadsScraper) Scrape(ctx context.Context, targetUrl string) (*d
 
 	pageSummary.Finalize()
 	return pageSummary, nil
-}
-
-func (scraper *ThreadsScraper) extractMeta(document *goquery.Document, attributeName, attributeValue string) string {
-	selection := document.Find("meta[" + attributeName + "=\"" + attributeValue + "\"]")
-	return selection.AttrOr("content", "")
 }

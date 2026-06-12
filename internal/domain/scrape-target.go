@@ -39,6 +39,14 @@ func (target *ScrapeTarget) ReplaceHost(newHost string) string {
 	return copied.String()
 }
 
+func (target *ScrapeTarget) ReplaceHostSuffix(old, newSuffix string) string {
+	copied := *target.parsedURL
+	if strings.HasSuffix(copied.Host, old) {
+		copied.Host = strings.Replace(copied.Host, old, newSuffix, 1)
+	}
+	return copied.String()
+}
+
 func (target *ScrapeTarget) IsInstagram() bool {
 	hostname := target.Hostname()
 	return hostname == "instagram.com" || hostname == "www.instagram.com"
@@ -67,4 +75,52 @@ func (target *ScrapeTarget) IsGoogleMaps() bool {
 		strings.HasSuffix(hostname, ".google.com") ||
 		strings.HasSuffix(hostname, ".google.co.jp")
 	return isGoogle && strings.HasPrefix(target.Path(), "/maps")
+}
+
+func (target *ScrapeTarget) IsAmazon() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "amazon.co.jp") ||
+		strings.HasSuffix(hostname, "amazon.com") ||
+		hostname == "amzn.asia" ||
+		hostname == "amzn.to"
+}
+
+func (target *ScrapeTarget) IsYouTube() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "youtube.com") || hostname == "youtu.be"
+}
+
+func (target *ScrapeTarget) IsNitori() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "nitori-net.jp")
+}
+
+func (target *ScrapeTarget) IsSpotify() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "spotify.com")
+}
+
+func (target *ScrapeTarget) IsNicoNico() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "nicovideo.jp") || hostname == "nico.ms"
+}
+
+func (target *ScrapeTarget) IsBluesky() bool {
+	hostname := target.Hostname()
+	return hostname == "bsky.app" || hostname == "www.bsky.app"
+}
+
+func (target *ScrapeTarget) IsThreads() bool {
+	hostname := target.Hostname()
+	return hostname == "threads.net" || hostname == "www.threads.net" || hostname == "threads.com" || hostname == "www.threads.com"
+}
+
+func (target *ScrapeTarget) IsTwitter() bool {
+	hostname := target.Hostname()
+	return hostname == "twitter.com" || hostname == "www.twitter.com" || hostname == "x.com" || hostname == "www.x.com"
+}
+
+func (target *ScrapeTarget) IsYodobashi() bool {
+	hostname := target.Hostname()
+	return strings.HasSuffix(hostname, "yodobashi.com")
 }

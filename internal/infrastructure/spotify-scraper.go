@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -47,24 +46,20 @@ func NewSpotifyScraper(webFetcher *WebFetcher) *SpotifyScraper {
 	}
 }
 
-func (scraper *SpotifyScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	return parsedUrl.Hostname() == "open.spotify.com"
+func (scraper *SpotifyScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsSpotify()
 }
 
-func (scraper *SpotifyScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *SpotifyScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	kind, id, parseError := parseSpotifyContent(targetUrl)
+	kind, id, parseError := parseSpotifyContent(target.Path())
 	if parseError != nil {
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(target.RawURL())
 	pageSummary.SetTitle("Spotify")
 	pageSummary.SetSiteName("Spotify")
 	pageSummary.SetIcon(spotifyIconURL)
@@ -84,13 +79,8 @@ func (scraper *SpotifyScraper) Scrape(ctx context.Context, targetUrl string) (*d
 	return pageSummary, nil
 }
 
-func parseSpotifyContent(targetUrl string) (string, string, error) {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return "", "", parseError
-	}
-
-	pathParts := strings.Split(strings.Trim(parsedUrl.Path, "/"), "/")
+func parseSpotifyContent(urlPath string) (string, string, error) {
+	pathParts := strings.Split(strings.Trim(urlPath, "/"), "/")
 	if len(pathParts) < 2 {
 		return "", "", fmt.Errorf("unsupported spotify url format")
 	}

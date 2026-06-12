@@ -2,8 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/user/osamy/internal/domain"
@@ -19,19 +17,15 @@ func NewYodobashiScraper(webFetcher *WebFetcher) *YodobashiScraper {
 	}
 }
 
-func (scraper *YodobashiScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	return strings.HasSuffix(parsedUrl.Hostname(), "yodobashi.com")
+func (scraper *YodobashiScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsYodobashi()
 }
 
-func (scraper *YodobashiScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *YodobashiScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, targetUrl)
+	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, target.RawURL())
 	if fetchError != nil {
 		return nil, fetchError
 	}
@@ -42,7 +36,7 @@ func (scraper *YodobashiScraper) Scrape(ctx context.Context, targetUrl string) (
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(target.RawURL())
 	pageSummary.SetSiteName("ヨドバシ.com")
 
 	title := document.Find("#productsDetails h1").Text()

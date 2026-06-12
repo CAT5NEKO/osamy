@@ -3,6 +3,6 @@ package domain
 import "context"
 
 type ScraperDriver interface {
-	CanHandle(url string) bool
-	Scrape(ctx context.Context, url string) (*PageSummary, error)
+	CanHandle(target *ScrapeTarget) bool
+	Scrape(ctx context.Context, target *ScrapeTarget) (*PageSummary, error)
 }

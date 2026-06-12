@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -35,33 +34,25 @@ func NewNitoriScraper(webFetcher *WebFetcher) *NitoriScraper {
 	}
 }
 
-func (scraper *NitoriScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	return strings.HasSuffix(parsedUrl.Hostname(), "nitori-net.jp")
+func (scraper *NitoriScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsNitori()
 }
 
-func (scraper *NitoriScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
-	productCode := scraper.extractProductCode(targetUrl)
+func (scraper *NitoriScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
+	productCode := extractNitoriProductCode(target.Path())
 	if productCode != "" {
-		summary, apiError := scraper.scrapeViaApi(ctx, targetUrl, productCode)
+		summary, apiError := scraper.scrapeViaApi(ctx, target.RawURL(), productCode)
 		if apiError != nil {
 			return nil, apiError
 		}
 		return summary, nil
 	}
 
-	return scraper.scrapeViaHtml(ctx, targetUrl)
+	return scraper.scrapeViaHtml(ctx, target.RawURL())
 }
 
-func (scraper *NitoriScraper) extractProductCode(targetUrl string) string {
-	parsed, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return ""
-	}
-	pathParts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+func extractNitoriProductCode(urlPath string) string {
+	pathParts := strings.Split(strings.Trim(urlPath, "/"), "/")
 	if len(pathParts) > 0 {
 		lastPart := pathParts[len(pathParts)-1]
 		if len(lastPart) > 5 {

@@ -2,11 +2,8 @@ package infrastructure
 
 import (
 	"context"
-	"net/url"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -20,20 +17,15 @@ func NewBlueskyScraper(webFetcher *WebFetcher) *BlueskyScraper {
 	}
 }
 
-func (scraper *BlueskyScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	hostname := strings.ToLower(parsedUrl.Hostname())
-	return hostname == "bsky.app" || hostname == "www.bsky.app"
+func (scraper *BlueskyScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsBluesky()
 }
 
-func (scraper *BlueskyScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *BlueskyScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, targetUrl)
+	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, target.RawURL())
 	if fetchError != nil {
 		return nil, fetchError
 	}
@@ -44,37 +36,32 @@ func (scraper *BlueskyScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(target.RawURL())
 
-	title := scraper.extractMeta(document, "property", "og:title")
+	title := ExtractMeta(document, "property", "og:title")
 	if title == "" {
 		title = document.Find("title").Text()
 	}
 	pageSummary.SetTitle(title)
 
-	description := scraper.extractMeta(document, "property", "og:description")
+	description := ExtractMeta(document, "property", "og:description")
 	if description == "" {
-		description = scraper.extractMeta(document, "name", "description")
+		description = ExtractMeta(document, "name", "description")
 	}
 	pageSummary.SetDescription(description)
 
-	thumbnail := scraper.extractMeta(document, "property", "og:image")
-	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, thumbnail))
+	thumbnail := ExtractMeta(document, "property", "og:image")
+	pageSummary.SetThumbnail(ResolveRelativeUrl(target.RawURL(), thumbnail))
 
 	pageSummary.SetSiteName("Bluesky")
 	pageSummary.SetIcon("https://bsky.app/static/favicon-32x32.png")
 
-	videoUrl := scraper.extractMeta(document, "property", "og:video:url")
+	videoUrl := ExtractMeta(document, "property", "og:video:url")
 	if videoUrl == "" {
-		videoUrl = scraper.extractMeta(document, "property", "og:video")
+		videoUrl = ExtractMeta(document, "property", "og:video")
 	}
 	pageSummary.SetPlayer(videoUrl, 0, 0)
 
 	pageSummary.Finalize()
 	return pageSummary, nil
-}
-
-func (scraper *BlueskyScraper) extractMeta(document *goquery.Document, attributeName, attributeValue string) string {
-	selection := document.Find("meta[" + attributeName + "=\"" + attributeValue + "\"]")
-	return selection.AttrOr("content", "")
 }

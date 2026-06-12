@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/user/osamy/internal/domain"
 )
 
 func TestNitoriScraperResolvesRelativeThumbnail(t *testing.T) {
@@ -18,7 +20,11 @@ func TestNitoriScraperResolvesRelativeThumbnail(t *testing.T) {
 	defer server.Close()
 
 	scraper := NewNitoriScraper(newTestWebFetcher())
-	summary, err := scraper.Scrape(context.Background(), server.URL+"/home")
+	target, err := domain.NewScrapeTarget(server.URL + "/home")
+	if err != nil {
+		t.Fatalf("failed to create scrape target: %v", err)
+	}
+	summary, err := scraper.Scrape(context.Background(), target)
 	if err != nil {
 		t.Fatalf("scrape failed: %v", err)
 	}
@@ -30,3 +36,4 @@ func TestNitoriScraperResolvesRelativeThumbnail(t *testing.T) {
 		t.Fatalf("unexpected thumbnail: got %s want %s", summary.Thumbnail, expected)
 	}
 }
+

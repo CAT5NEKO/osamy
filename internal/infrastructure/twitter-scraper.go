@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/user/osamy/internal/domain"
@@ -44,21 +42,15 @@ func NewTwitterScraper(webFetcher *WebFetcher) *TwitterScraper {
 	}
 }
 
-func (scraper *TwitterScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	hostname := strings.ToLower(parsedUrl.Hostname())
-	return hostname == "twitter.com" || hostname == "www.twitter.com" || hostname == "x.com" || hostname == "www.x.com"
+func (scraper *TwitterScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsTwitter()
 }
 
-func (scraper *TwitterScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *TwitterScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	parsedUrl, _ := url.Parse(targetUrl)
-	apiUrl := fmt.Sprintf("https://api.fxtwitter.com%s", parsedUrl.Path)
+	apiUrl := fmt.Sprintf("https://api.fxtwitter.com%s", target.Path())
 
 	response, fetchError := scraper.webFetcher.FetchAsBot(scrapeCtx, apiUrl)
 	if fetchError != nil {
@@ -75,7 +67,7 @@ func (scraper *TwitterScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		return nil, fmt.Errorf("fxtwitter api returned error: %s", data.Message)
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(target.RawURL())
 
 	title := fmt.Sprintf("%s (@%s)", data.Tweet.Author.Name, data.Tweet.Author.ScreenName)
 	pageSummary.SetTitle(title)

@@ -21,20 +21,15 @@ func NewGeneralScraper(webFetcher *WebFetcher) *GeneralScraper {
 	}
 }
 
-func (scraper *GeneralScraper) CanHandle(targetURL string) bool {
+func (scraper *GeneralScraper) CanHandle(target *domain.ScrapeTarget) bool {
 	return true
 }
 
-func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*domain.PageSummary, error) {
+func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	scrapeTarget, err := domain.NewScrapeTarget(targetURL)
-	if err != nil {
-		return nil, err
-	}
-
-	fetchURL, useBotUserAgent := scraper.resolveFetchParameters(scrapeTarget)
+	fetchURL, useBotUserAgent := scraper.resolveFetchParameters(target)
 
 	var response *http.Response
 	var fetchError error
@@ -56,9 +51,9 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 	}
 	defer response.Body.Close()
 
-	contentKind := DetectContentKind(response, targetURL)
+	contentKind := DetectContentKind(response, target.RawURL())
 	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet || contentKind == ContentKindWord {
-		return BuildFilePreviewSummary(targetURL, response), nil
+		return BuildFilePreviewSummary(target.RawURL(), response), nil
 	}
 
 	document, parseError := BuildDocumentFromResponse(response)
@@ -66,99 +61,99 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetURL)
-	title := scraper.extractMeta(document, "property", "og:title")
+	pageSummary := domain.NewPageSummary(target.RawURL())
+	title := ExtractMeta(document, "property", "og:title")
 	if title == "" {
-		title = scraper.extractMeta(document, "name", "twitter:title")
+		title = ExtractMeta(document, "name", "twitter:title")
 	}
 	if title == "" {
-		title = scraper.extractMeta(document, "property", "twitter:title")
+		title = ExtractMeta(document, "property", "twitter:title")
 	}
 	if title == "" {
 		title = document.Find("title").Text()
 	}
 	pageSummary.SetTitle(title)
 
-	description := scraper.extractMeta(document, "property", "og:description")
+	description := ExtractMeta(document, "property", "og:description")
 	if description == "" {
-		description = scraper.extractMeta(document, "name", "twitter:description")
+		description = ExtractMeta(document, "name", "twitter:description")
 	}
 	if description == "" {
-		description = scraper.extractMeta(document, "property", "twitter:description")
+		description = ExtractMeta(document, "property", "twitter:description")
 	}
 	if description == "" {
-		description = scraper.extractMeta(document, "name", "description")
+		description = ExtractMeta(document, "name", "description")
 	}
 	pageSummary.SetDescription(description)
 
-	thumbnail := scraper.extractMeta(document, "property", "og:image")
+	thumbnail := ExtractMeta(document, "property", "og:image")
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "property", "og:image:secure_url")
+		thumbnail = ExtractMeta(document, "property", "og:image:secure_url")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "property", "og:image:url")
+		thumbnail = ExtractMeta(document, "property", "og:image:url")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "og:image")
+		thumbnail = ExtractMeta(document, "name", "og:image")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "og:image:secure_url")
+		thumbnail = ExtractMeta(document, "name", "og:image:secure_url")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "og:image:url")
+		thumbnail = ExtractMeta(document, "name", "og:image:url")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "twitter:image")
+		thumbnail = ExtractMeta(document, "name", "twitter:image")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "twitter:image:src")
+		thumbnail = ExtractMeta(document, "name", "twitter:image:src")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "property", "twitter:image")
+		thumbnail = ExtractMeta(document, "property", "twitter:image")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "itemprop", "image")
+		thumbnail = ExtractMeta(document, "itemprop", "image")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractLink(document, "image_src")
+		thumbnail = ExtractLink(document, "image_src")
 	}
 	if thumbnail == "" {
-		thumbnail = scraper.extractMeta(document, "name", "thumbnail")
+		thumbnail = ExtractMeta(document, "name", "thumbnail")
 	}
 	if thumbnail == "" {
 		thumbnail = scraper.extractImageFromJSONLD(document)
 	}
-	pageSummary.SetThumbnail(ResolveRelativeUrl(targetURL, thumbnail))
+	pageSummary.SetThumbnail(ResolveRelativeUrl(target.RawURL(), thumbnail))
 
-	siteName := scraper.extractMeta(document, "property", "og:site_name")
+	siteName := ExtractMeta(document, "property", "og:site_name")
 	if siteName == "ddinstagram" {
 		siteName = "Instagram"
 	}
 	pageSummary.SetSiteName(siteName)
 
 	icon := scraper.extractIcon(document)
-	pageSummary.SetIcon(ResolveRelativeUrl(targetURL, icon))
+	pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), icon))
 
-	videoURL := scraper.extractMeta(document, "property", "og:video:url")
+	videoURL := ExtractMeta(document, "property", "og:video:url")
 	if videoURL == "" {
-		videoURL = scraper.extractMeta(document, "property", "og:video")
+		videoURL = ExtractMeta(document, "property", "og:video")
 	}
 
-	twitterCard := scraper.extractMeta(document, "name", "twitter:card")
+	twitterCard := ExtractMeta(document, "name", "twitter:card")
 	if twitterCard == "" {
-		twitterCard = scraper.extractMeta(document, "property", "twitter:card")
+		twitterCard = ExtractMeta(document, "property", "twitter:card")
 	}
 
 	if videoURL == "" && twitterCard != "summary_large_image" {
-		videoURL = scraper.extractMeta(document, "name", "twitter:player:stream")
+		videoURL = ExtractMeta(document, "name", "twitter:player:stream")
 		if videoURL == "" {
-			videoURL = scraper.extractMeta(document, "property", "twitter:player:stream")
+			videoURL = ExtractMeta(document, "property", "twitter:player:stream")
 		}
 		if videoURL == "" {
-			videoURL = scraper.extractMeta(document, "name", "twitter:player")
+			videoURL = ExtractMeta(document, "name", "twitter:player")
 		}
 		if videoURL == "" {
-			videoURL = scraper.extractMeta(document, "property", "twitter:player")
+			videoURL = ExtractMeta(document, "property", "twitter:player")
 		}
 	}
 	if strings.TrimSpace(videoURL) != "" {
@@ -172,36 +167,10 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, targetURL string) (*d
 	return pageSummary, nil
 }
 
-func (scraper *GeneralScraper) extractMeta(document *goquery.Document, attributeName, attributeValue string) string {
-	value := ""
-	document.Find("meta["+attributeName+"=\""+attributeValue+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
-		content := strings.TrimSpace(selection.AttrOr("content", ""))
-		if content == "" {
-			return true
-		}
-		value = content
-		return false
-	})
-	return value
-}
-
-func (scraper *GeneralScraper) extractLink(document *goquery.Document, relationship string) string {
-	value := ""
-	document.Find("link[rel=\""+relationship+"\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
-		href := strings.TrimSpace(selection.AttrOr("href", ""))
-		if href == "" {
-			return true
-		}
-		value = href
-		return false
-	})
-	return value
-}
-
 func (scraper *GeneralScraper) extractIcon(document *goquery.Document) string {
 	rels := []string{"icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"}
 	for _, rel := range rels {
-		icon := scraper.extractLink(document, rel)
+		icon := ExtractLink(document, rel)
 		if icon != "" {
 			return icon
 		}
@@ -337,4 +306,3 @@ func (scraper *GeneralScraper) resolveFetchParameters(target *domain.ScrapeTarge
 	}
 	return target.RawURL(), false
 }
-

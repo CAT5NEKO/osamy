@@ -2,12 +2,9 @@ package infrastructure
 
 import (
 	"context"
-	"net/url"
 	"regexp"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -23,20 +20,15 @@ func NewNicoNicoScraper(webFetcher *WebFetcher) *NicoNicoScraper {
 	}
 }
 
-func (scraper *NicoNicoScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	hostname := strings.ToLower(parsedUrl.Hostname())
-	return hostname == "nicovideo.jp" || hostname == "www.nicovideo.jp" || hostname == "sp.nicovideo.jp"
+func (scraper *NicoNicoScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsNicoNico()
 }
 
-func (scraper *NicoNicoScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *NicoNicoScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, targetUrl)
+	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, target.RawURL())
 	if fetchError != nil {
 		return nil, fetchError
 	}
@@ -47,19 +39,19 @@ func (scraper *NicoNicoScraper) Scrape(ctx context.Context, targetUrl string) (*
 		return nil, parseError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
-	pageSummary.SetTitle(scraper.extractMeta(document, "property", "og:title"))
-	pageSummary.SetDescription(scraper.extractMeta(document, "property", "og:description"))
-	pageSummary.SetThumbnail(scraper.extractMeta(document, "property", "og:image"))
-	pageSummary.SetSiteName(scraper.extractMeta(document, "property", "og:site_name"))
+	pageSummary := domain.NewPageSummary(target.RawURL())
+	pageSummary.SetTitle(ExtractMeta(document, "property", "og:title"))
+	pageSummary.SetDescription(ExtractMeta(document, "property", "og:description"))
+	pageSummary.SetThumbnail(ExtractMeta(document, "property", "og:image"))
+	pageSummary.SetSiteName(ExtractMeta(document, "property", "og:site_name"))
 
-	icon := scraper.extractLink(document, "icon")
+	icon := ExtractLink(document, "icon")
 	if icon == "" {
-		icon = scraper.extractLink(document, "shortcut icon")
+		icon = ExtractLink(document, "shortcut icon")
 	}
-	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, icon))
+	pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), icon))
 
-	matches := niconicoIdRegex.FindStringSubmatch(targetUrl)
+	matches := niconicoIdRegex.FindStringSubmatch(target.RawURL())
 	if len(matches) > 1 {
 		videoId := matches[1]
 		embedUrl := "https://embed.nicovideo.jp/watch/" + videoId
@@ -69,14 +61,4 @@ func (scraper *NicoNicoScraper) Scrape(ctx context.Context, targetUrl string) (*
 
 	pageSummary.Finalize()
 	return pageSummary, nil
-}
-
-func (scraper *NicoNicoScraper) extractMeta(document *goquery.Document, attributeName, attributeValue string) string {
-	selection := document.Find("meta[" + attributeName + "=\"" + attributeValue + "\"]")
-	return selection.AttrOr("content", "")
-}
-
-func (scraper *NicoNicoScraper) extractLink(document *goquery.Document, relationship string) string {
-	selection := document.Find("link[rel=\"" + relationship + "\"]")
-	return selection.AttrOr("href", "")
 }

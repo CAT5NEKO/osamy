@@ -33,23 +33,15 @@ func NewYouTubeScraper(webFetcher *WebFetcher) *YouTubeScraper {
 	}
 }
 
-func (scraper *YouTubeScraper) CanHandle(targetUrl string) bool {
-	parsedUrl, parseError := url.Parse(targetUrl)
-	if parseError != nil {
-		return false
-	}
-	hostname := parsedUrl.Hostname()
-	if strings.HasSuffix(hostname, "youtube.com") || hostname == "youtu.be" {
-		return true
-	}
-	return false
+func (scraper *YouTubeScraper) CanHandle(target *domain.ScrapeTarget) bool {
+	return target.IsYouTube()
 }
 
-func (scraper *YouTubeScraper) Scrape(ctx context.Context, targetUrl string) (*domain.PageSummary, error) {
+func (scraper *YouTubeScraper) Scrape(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	oEmbedUrl := fmt.Sprintf("https://www.youtube.com/oembed?url=%s&format=json&maxwidth=600", url.QueryEscape(targetUrl))
+	oEmbedUrl := fmt.Sprintf("https://www.youtube.com/oembed?url=%s&format=json&maxwidth=600", url.QueryEscape(target.RawURL()))
 	response, fetchError := scraper.webFetcher.Fetch(scrapeCtx, oEmbedUrl)
 	if fetchError != nil {
 		return nil, fetchError
@@ -61,7 +53,7 @@ func (scraper *YouTubeScraper) Scrape(ctx context.Context, targetUrl string) (*d
 		return nil, decodeError
 	}
 
-	pageSummary := domain.NewPageSummary(targetUrl)
+	pageSummary := domain.NewPageSummary(target.RawURL())
 	pageSummary.SetTitle(data.Title)
 	pageSummary.SetThumbnail(data.ThumbnailUrl)
 	pageSummary.SetSiteName(data.ProviderName)
