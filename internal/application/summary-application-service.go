@@ -5,14 +5,21 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"sync"
 
 	"github.com/user/osamy/internal/domain"
 )
+
+type inflightEntry struct {
+	done   chan struct{}
+	result *domain.PageSummary
+}
 
 type SummaryApplicationService struct {
 	scrapers  []domain.ScraperDriver
 	cache     domain.CacheRepository
 	semaphore chan struct{}
+	inflight  sync.Map
 }
 
 func NewSummaryApplicationService(scrapers []domain.ScraperDriver, cache domain.CacheRepository, maxConcurrency int) *SummaryApplicationService {
@@ -32,10 +39,19 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, url st
 		log.Printf("Cache access failed: %v", cacheError)
 	}
 
-	scrapeTarget, err := domain.NewScrapeTarget(url)
-	if err != nil {
-		return nil, err
+	entry := &inflightEntry{done: make(chan struct{})}
+	existing, loaded := service.inflight.LoadOrStore(url, entry)
+	if loaded {
+		existingEntry := existing.(*inflightEntry)
+		select {
+		case <-existingEntry.done:
+			return existingEntry.result, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
+
+	defer service.inflight.Delete(url)
 
 	select {
 	case service.semaphore <- struct{}{}:
@@ -44,21 +60,37 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, url st
 	}
 	defer func() { <-service.semaphore }()
 
+	result := service.fetchURL(url)
+
+	entry.result = result
+	close(entry.done)
+
+	if result != nil {
+		_ = service.cache.Set(context.Background(), url, result)
+	}
+	return result, nil
+}
+
+func (service *SummaryApplicationService) fetchURL(url string) *domain.PageSummary {
+	scrapeTarget, err := domain.NewScrapeTarget(url)
+	if err != nil {
+		return nil
+	}
+
 	for _, scraper := range service.scrapers {
 		if scraper.CanHandle(scrapeTarget) {
-			scrapedSummary, scrapeError := safeScrape(scraper, ctx, scrapeTarget)
+			scrapedSummary, scrapeError := safeScrape(scraper, context.Background(), scrapeTarget)
 			if scrapeError != nil {
 				log.Printf("Scraper failed for %s: %v", url, scrapeError)
-				return nil, nil
+				return nil
 			}
 			if scrapedSummary != nil {
-				_ = service.cache.Set(ctx, url, scrapedSummary)
-				return scrapedSummary, nil
+				return scrapedSummary
 			}
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func safeScrape(scraper domain.ScraperDriver, ctx context.Context, target *domain.ScrapeTarget) (summary *domain.PageSummary, err error) {
