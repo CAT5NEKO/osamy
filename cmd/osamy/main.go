@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -79,7 +82,7 @@ func main() {
 
 	host := os.Getenv("HOST")
 	if host == "" {
-		host = "localhost"
+		host = ""
 	}
 
 	port := os.Getenv("PORT")
@@ -102,11 +105,30 @@ func main() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	log.Printf("Server starting on %s", address)
-	if listenError := server.ListenAndServe(); listenError != nil {
-		log.Fatalf("Server failed: %v", listenError)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Server starting on %s", address)
+		if listenError := server.ListenAndServe(); listenError != nil && !errors.Is(listenError, http.ErrServerClosed) {
+			log.Printf("Server failed: %v", listenError)
+		}
+	}()
+
+	<-quit
+	log.Printf("Shutting down server...")
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	if shutdownError := server.Shutdown(shutdownCtx); shutdownError != nil {
+		log.Printf("Server shutdown error: %v", shutdownError)
 	}
+
 	if pprofServer != nil {
 		_ = pprofServer.Close()
 	}
+
+	log.Printf("Server stopped")
 }
