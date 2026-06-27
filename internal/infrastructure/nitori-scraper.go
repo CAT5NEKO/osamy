@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/user/osamy/internal/domain"
 )
 
@@ -166,6 +167,20 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 	}
 	pageSummary.SetTitle(title)
 
+	image := resolveNitoriImage(document, targetUrl)
+	pageSummary.SetThumbnail(image)
+
+	icon := scraper.extractNitoriIcon(document)
+	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, icon))
+	if pageSummary.Icon == "" {
+		pageSummary.SetIcon("https://www.nitori-net.jp/favicon.ico")
+	}
+
+	pageSummary.Finalize()
+	return pageSummary, nil
+}
+
+func resolveNitoriImage(document *goquery.Document, baseUrl string) string {
 	image := document.Find(".p-product-image img").First().AttrOr("src", "")
 	if image == "" {
 		image = document.Find(".ph-item-img--main img").First().AttrOr("src", "")
@@ -174,15 +189,68 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 		image = document.Find(".p-introduction-block img").First().AttrOr("src", "")
 	}
 	if image == "" {
+		image = document.Find(".p-hero img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-product-image-block img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-product-slider img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".itemImg img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".c-product-gallery img").First().AttrOr("src", "")
+	}
+	if image == "" {
 		image = ExtractMeta(document, "property", "og:image")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "property", "og:image:secure_url")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "property", "og:image:url")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "name", "og:image")
 	}
 	if image == "" {
 		image = ExtractMeta(document, "name", "twitter:image")
 	}
-	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, image))
+	if image == "" {
+		image = ExtractMeta(document, "name", "twitter:image:src")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "itemprop", "image")
+	}
+	if image == "" {
+		image = ExtractLink(document, "image_src")
+	}
+	return ResolveRelativeUrl(baseUrl, image)
+}
 
-	pageSummary.SetIcon("https://www.nitori-net.jp/favicon.ico")
+func (scraper *NitoriScraper) extractNitoriIcon(document *goquery.Document) string {
+	rels := []string{"icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed"}
+	for _, rel := range rels {
+		icon := ExtractLink(document, rel)
+		if icon != "" {
+			return icon
+		}
+	}
 
-	pageSummary.Finalize()
-	return pageSummary, nil
+	icon := ""
+	document.Find("link[rel]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		rel := strings.ToLower(selection.AttrOr("rel", ""))
+		if rel == "" || !strings.Contains(rel, "icon") {
+			return true
+		}
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return true
+		}
+		icon = href
+		return false
+	})
+	return icon
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -100,9 +101,15 @@ func (scraper *TwitterScraper) scrapeViaFxTwitter(ctx context.Context, target *d
 }
 
 func (scraper *TwitterScraper) scrapeViaOGP(ctx context.Context, target *domain.ScrapeTarget) (*domain.PageSummary, error) {
-	response, fetchError := scraper.webFetcher.FetchAsBot(ctx, target.RawURL())
+	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	response, fetchError := scraper.webFetcher.FetchAsFacebookBot(scrapeCtx, target.RawURL())
 	if fetchError != nil {
-		return nil, fetchError
+		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, target.RawURL())
+		if fetchError != nil {
+			return nil, fetchError
+		}
 	}
 	defer response.Body.Close()
 
@@ -118,6 +125,9 @@ func (scraper *TwitterScraper) scrapeViaOGP(ctx context.Context, target *domain.
 		title = ExtractMeta(document, "name", "twitter:title")
 	}
 	if title == "" {
+		title = ExtractMeta(document, "property", "twitter:title")
+	}
+	if title == "" {
 		title = document.Find("title").Text()
 	}
 	pageSummary.SetTitle(title)
@@ -127,16 +137,40 @@ func (scraper *TwitterScraper) scrapeViaOGP(ctx context.Context, target *domain.
 		description = ExtractMeta(document, "name", "twitter:description")
 	}
 	if description == "" {
+		description = ExtractMeta(document, "property", "twitter:description")
+	}
+	if description == "" {
 		description = ExtractMeta(document, "name", "description")
 	}
 	pageSummary.SetDescription(description)
 
 	thumbnail := ExtractMeta(document, "property", "og:image")
 	if thumbnail == "" {
+		thumbnail = ExtractMeta(document, "property", "og:image:secure_url")
+	}
+	if thumbnail == "" {
+		thumbnail = ExtractMeta(document, "property", "og:image:url")
+	}
+	if thumbnail == "" {
+		thumbnail = ExtractMeta(document, "name", "og:image")
+	}
+	if thumbnail == "" {
 		thumbnail = ExtractMeta(document, "name", "twitter:image")
 	}
 	if thumbnail == "" {
 		thumbnail = ExtractMeta(document, "name", "twitter:image:src")
+	}
+	if thumbnail == "" {
+		thumbnail = ExtractMeta(document, "property", "twitter:image")
+	}
+	if thumbnail == "" {
+		thumbnail = ExtractMeta(document, "itemprop", "image")
+	}
+	if thumbnail == "" {
+		thumbnail = ExtractLink(document, "image_src")
+	}
+	if thumbnail == "" {
+		thumbnail = extractImageFromJSONLDGeneral(document)
 	}
 	pageSummary.SetThumbnail(ResolveRelativeUrl(target.RawURL(), thumbnail))
 
@@ -151,15 +185,49 @@ func (scraper *TwitterScraper) scrapeViaOGP(ctx context.Context, target *domain.
 }
 
 func (scraper *TwitterScraper) extractIconFromTwitter(document *goquery.Document) string {
-	icon := ExtractLink(document, "icon")
-	if icon == "" {
-		icon = ExtractLink(document, "shortcut icon")
+	rels := []string{"icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"}
+	for _, rel := range rels {
+		icon := ExtractLink(document, rel)
+		if icon != "" {
+			return icon
+		}
 	}
-	if icon == "" {
-		icon = ExtractLink(document, "apple-touch-icon")
+
+	icon := ""
+	document.Find("link[rel]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		rel := strings.ToLower(selection.AttrOr("rel", ""))
+		if rel == "" || !strings.Contains(rel, "icon") {
+			return true
+		}
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return true
+		}
+		icon = href
+		return false
+	})
+	if icon != "" {
+		return icon
 	}
-	if icon == "" {
-		icon = "https://abs.twimg.com/favicons/twitter.3.ico"
-	}
-	return icon
+
+	return "https://abs.twimg.com/favicons/twitter.3.ico"
+}
+
+func extractImageFromJSONLDGeneral(document *goquery.Document) string {
+	imageURL := ""
+	document.Find("script[type=\"application/ld+json\"]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		payload := strings.TrimSpace(selection.Text())
+		if payload == "" {
+			return true
+		}
+		decoder := json.NewDecoder(strings.NewReader(payload))
+		decoder.UseNumber()
+		var value interface{}
+		if err := decoder.Decode(&value); err != nil {
+			return true
+		}
+		imageURL = findImageInJSONLD(value)
+		return imageURL == ""
+	})
+	return imageURL
 }

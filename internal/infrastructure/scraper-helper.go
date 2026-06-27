@@ -111,8 +111,17 @@ func BuildFilePreviewSummary(targetURL string, response *http.Response) *domain.
 	pageSummary.SetTitle(resolveFileTitle(targetURL, response))
 	pageSummary.SetDescription(resolveFileDescription(response))
 	pageSummary.SetSiteName(resolveFileSiteName(targetURL, response))
+	pageSummary.SetIcon(resolveFileIcon(targetURL, response))
 	pageSummary.Finalize()
 	return pageSummary
+}
+
+func resolveFileIcon(targetURL string, response *http.Response) string {
+	parsedURL := resolveURLForFile(targetURL, response)
+	if parsedURL == nil {
+		return ""
+	}
+	return fmt.Sprintf("https://%s/favicon.ico", parsedURL.Hostname())
 }
 
 func resolveFileTitle(targetURL string, response *http.Response) string {

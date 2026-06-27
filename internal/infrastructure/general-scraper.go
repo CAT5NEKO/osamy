@@ -1,8 +1,10 @@
 package infrastructure
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -44,11 +46,30 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 	if fetchError != nil {
 		return nil, fetchError
 	}
-	if !useBotUserAgent && !useFacebookBot && shouldRetryWithBot(response) {
-		response.Body.Close()
-		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
-		if fetchError != nil {
-			return nil, fetchError
+
+	if !useBotUserAgent && !useFacebookBot {
+		var botRetry bool
+		if shouldRetryWithBot(response) {
+			botRetry = true
+			response.Body.Close()
+		} else {
+			bodyBytes, readErr := io.ReadAll(io.LimitReader(response.Body, MaxFetchResponseBodySize))
+			response.Body.Close()
+			if readErr != nil {
+				return nil, readErr
+			}
+			if isBotChallenge(bodyBytes) {
+				botRetry = true
+			} else {
+				response.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			}
+		}
+
+		if botRetry {
+			response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
+			if fetchError != nil {
+				return nil, fetchError
+			}
 		}
 	}
 	defer response.Body.Close()
@@ -207,6 +228,29 @@ func shouldRetryWithBot(response *http.Response) bool {
 	default:
 		return false
 	}
+}
+
+func isBotChallenge(body []byte) bool {
+	bodyText := strings.ToLower(string(body))
+	if len(bodyText) > 50000 {
+		return false
+	}
+
+	if strings.Contains(bodyText, "cf-browser-verification") ||
+		strings.Contains(bodyText, "_cf_chl_opt") ||
+		strings.Contains(bodyText, "cf-challenge") ||
+		strings.Contains(bodyText, "attention required! | cloudflare") {
+		return true
+	}
+
+	if len(body) < 5000 {
+		hasMoment := strings.Contains(bodyText, "just a moment") || strings.Contains(bodyText, "checking your browser")
+		if hasMoment && strings.Contains(bodyText, "cloudflare") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (scraper *GeneralScraper) extractImageFromJSONLD(document *goquery.Document) string {
