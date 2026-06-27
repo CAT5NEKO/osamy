@@ -3,11 +3,11 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o osamy ./cmd/osamy/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o osamy ./cmd/osamy/main.go
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /app
-COPY --from=builder /app/osamy .
+FROM gcr.io/distroless/static-debian12:nonroot
+WORKDIR /
+COPY --from=builder /app/osamy /osamy
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 EXPOSE 8080
-CMD ["./osamy"]
+CMD ["/osamy"]
