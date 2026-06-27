@@ -67,6 +67,26 @@ func (fetcher *WebFetcher) FetchAsBot(ctx context.Context, url string) (*http.Re
 	return response, nil
 }
 
+func (fetcher *WebFetcher) FetchAsFacebookBot(ctx context.Context, url string) (*http.Response, error) {
+	request, requestError := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if requestError != nil {
+		return nil, requestError
+	}
+
+	request.Header.Set("User-Agent", "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)")
+	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	request.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
+
+	response, fetchError := fetcher.httpClient.Do(request)
+	if fetchError != nil {
+		return nil, fetchError
+	}
+
+	response.Body = io.NopCloser(io.LimitReader(response.Body, MaxFetchResponseBodySize))
+
+	return response, nil
+}
+
 func (fetcher *WebFetcher) Do(request *http.Request) (*http.Response, error) {
 	return fetcher.httpClient.Do(request)
 }

@@ -29,11 +29,13 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 	scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fetchURL, useBotUserAgent := scraper.resolveFetchParameters(target)
+	fetchURL, useBotUserAgent, useFacebookBot := scraper.resolveFetchParameters(target)
 
 	var response *http.Response
 	var fetchError error
-	if useBotUserAgent {
+	if useFacebookBot {
+		response, fetchError = scraper.webFetcher.FetchAsFacebookBot(scrapeCtx, fetchURL)
+	} else if useBotUserAgent {
 		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
 	} else {
 		response, fetchError = scraper.webFetcher.Fetch(scrapeCtx, fetchURL)
@@ -42,7 +44,7 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 	if fetchError != nil {
 		return nil, fetchError
 	}
-	if !useBotUserAgent && shouldRetryWithBot(response) {
+	if !useBotUserAgent && !useFacebookBot && shouldRetryWithBot(response) {
 		response.Body.Close()
 		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
 		if fetchError != nil {
@@ -133,6 +135,9 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 
 	icon := scraper.extractIcon(document)
 	pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), icon))
+	if pageSummary.Icon == "" {
+		pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), "/favicon.ico"))
+	}
 
 	videoURL := ExtractMeta(document, "property", "og:video:url")
 	if videoURL == "" {
@@ -291,18 +296,18 @@ func extractImageValue(value interface{}) string {
 	return ""
 }
 
-func (scraper *GeneralScraper) resolveFetchParameters(target *domain.ScrapeTarget) (string, bool) {
+func (scraper *GeneralScraper) resolveFetchParameters(target *domain.ScrapeTarget) (string, bool, bool) {
 	if target.IsInstagram() {
-		return target.ReplaceHost("ddinstagram.com"), true
+		return target.RawURL(), false, true
 	}
 	if target.IsTikTok() {
-		return target.ReplaceHost("vxtiktok.com"), true
+		return target.ReplaceHost("vxtiktok.com"), true, false
 	}
 	if target.IsPixiv() {
-		return target.ReplaceHost("phixiv.net"), true
+		return target.ReplaceHost("phixiv.net"), true, false
 	}
 	if target.IsGoogleMaps() {
-		return target.RawURL(), true
+		return target.RawURL(), true, false
 	}
-	return target.RawURL(), false
+	return target.RawURL(), false, false
 }

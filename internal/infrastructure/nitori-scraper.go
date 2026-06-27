@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -42,10 +43,10 @@ func (scraper *NitoriScraper) Scrape(ctx context.Context, target *domain.ScrapeT
 	productCode := extractNitoriProductCode(target.Path())
 	if productCode != "" {
 		summary, apiError := scraper.scrapeViaApi(ctx, target.RawURL(), productCode)
-		if apiError != nil {
-			return nil, apiError
+		if apiError == nil && summary != nil {
+			return summary, nil
 		}
-		return summary, nil
+		log.Printf("Nitori API failed for %s: %v, falling back to HTML", target.RawURL(), apiError)
 	}
 
 	return scraper.scrapeViaHtml(ctx, target.RawURL())
@@ -55,7 +56,7 @@ func extractNitoriProductCode(urlPath string) string {
 	pathParts := strings.Split(strings.Trim(urlPath, "/"), "/")
 	if len(pathParts) > 0 {
 		lastPart := pathParts[len(pathParts)-1]
-		if len(lastPart) > 5 {
+		if len(lastPart) >= 8 {
 			return lastPart
 		}
 	}
@@ -63,7 +64,7 @@ func extractNitoriProductCode(urlPath string) string {
 }
 
 func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, productCode string) (*domain.PageSummary, error) {
-	apiCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	apiCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
 	apiUrl := fmt.Sprintf("https://www.nitori-net.jp/occ/v2/nitorinet/nitori/products/%s?lang=ja&curr=JPY", productCode)
@@ -86,6 +87,18 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 		return nil, fetchError
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusServiceUnavailable {
+		time.Sleep(500 * time.Millisecond)
+		request2, _ := http.NewRequestWithContext(apiCtx, "GET", apiUrl, nil)
+		request2.Header = request.Header.Clone()
+		response2, retryError := scraper.webFetcher.Do(request2)
+		if retryError != nil {
+			return nil, retryError
+		}
+		response = response2
+		defer response.Body.Close()
+	}
 
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("api returned status %d", response.StatusCode)
@@ -146,7 +159,7 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 
 	title := document.Find(".p-product-name").First().Text()
 	if title == "" {
-		title = document.Find("meta[property='og:title']").AttrOr("content", "")
+		title = ExtractMeta(document, "property", "og:title")
 	}
 	if title == "" {
 		title = document.Find("title").Text()
@@ -155,7 +168,16 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 
 	image := document.Find(".p-product-image img").First().AttrOr("src", "")
 	if image == "" {
-		image = document.Find("meta[property='og:image']").AttrOr("content", "")
+		image = document.Find(".ph-item-img--main img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-introduction-block img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "property", "og:image")
+	}
+	if image == "" {
+		image = ExtractMeta(document, "name", "twitter:image")
 	}
 	pageSummary.SetThumbnail(ResolveRelativeUrl(targetUrl, image))
 

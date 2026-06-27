@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/user/osamy/internal/domain"
 )
 
 func loadFixture(t *testing.T, name string) string {
@@ -63,7 +65,11 @@ func TestGeneralScraperImageExtractionVariants(t *testing.T) {
 
 	for _, fixture := range fixtures {
 		targetURL := server.URL + "/" + fixture.name
-		summary, err := scraper.Scrape(context.Background(), targetURL)
+		scrapeTarget, parseErr := domain.NewScrapeTarget(targetURL)
+		if parseErr != nil {
+			t.Fatalf("failed to parse target URL: %v", parseErr)
+		}
+		summary, err := scraper.Scrape(context.Background(), scrapeTarget)
 		if err != nil {
 			t.Fatalf("scrape failed for %s: %v", fixture.name, err)
 		}
@@ -107,7 +113,11 @@ func TestGeneralScraperIconFallbacks(t *testing.T) {
 
 	for _, fixture := range fixtures {
 		targetURL := server.URL + "/" + fixture.name
-		summary, err := scraper.Scrape(context.Background(), targetURL)
+		scrapeTarget, parseErr := domain.NewScrapeTarget(targetURL)
+		if parseErr != nil {
+			t.Fatalf("failed to parse target URL: %v", parseErr)
+		}
+		summary, err := scraper.Scrape(context.Background(), scrapeTarget)
 		if err != nil {
 			t.Fatalf("scrape failed for %s: %v", fixture.name, err)
 		}
@@ -138,7 +148,12 @@ func TestGeneralScraperRetriesWithBotUserAgent(t *testing.T) {
 	defer server.Close()
 
 	scraper := NewGeneralScraper(newTestWebFetcher())
-	summary, err := scraper.Scrape(context.Background(), server.URL+"/blocked")
+	targetURL := server.URL + "/blocked"
+	scrapeTarget, parseErr := domain.NewScrapeTarget(targetURL)
+	if parseErr != nil {
+		t.Fatalf("failed to parse target URL: %v", parseErr)
+	}
+	summary, err := scraper.Scrape(context.Background(), scrapeTarget)
 	if err != nil {
 		t.Fatalf("scrape failed: %v", err)
 	}
