@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -47,6 +48,14 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 
 	if !useBotUserAgent && !useFacebookBot && shouldRetryWithBot(response) {
 		response.Body.Close()
+
+		delay := time.Duration(2000+rand.Int63n(1000)) * time.Millisecond
+		select {
+		case <-time.After(delay):
+		case <-scrapeCtx.Done():
+			return nil, scrapeCtx.Err()
+		}
+
 		response, fetchError = scraper.webFetcher.FetchAsBot(scrapeCtx, fetchURL)
 		if fetchError != nil {
 			return nil, fetchError
@@ -202,12 +211,7 @@ func shouldRetryWithBot(response *http.Response) bool {
 	if response == nil {
 		return false
 	}
-	switch response.StatusCode {
-	case http.StatusForbidden, http.StatusTooManyRequests, http.StatusServiceUnavailable:
-		return true
-	default:
-		return false
-	}
+	return response.StatusCode == http.StatusServiceUnavailable
 }
 
 func (scraper *GeneralScraper) extractImageFromJSONLD(document *goquery.Document) string {

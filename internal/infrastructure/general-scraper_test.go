@@ -143,7 +143,7 @@ func TestGeneralScraperRetriesWithBotUserAgent(t *testing.T) {
 			_, _ = io.WriteString(writer, fixture)
 			return
 		}
-		writer.WriteHeader(http.StatusForbidden)
+		writer.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
 
@@ -165,5 +165,70 @@ func TestGeneralScraperRetriesWithBotUserAgent(t *testing.T) {
 	}
 	if atomic.LoadInt32(&botRequests) == 0 {
 		t.Fatalf("expected bot retry request")
+	}
+	if atomic.LoadInt32(&botRequests) != 1 {
+		t.Fatalf("expected exactly 1 bot retry, got %d", atomic.LoadInt32(&botRequests))
+	}
+}
+
+func TestGeneralScraperDoesNotRetryOnForbidden(t *testing.T) {
+	var botRequests int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		userAgent := request.Header.Get("User-Agent")
+		if strings.Contains(userAgent, "Discordbot") {
+			atomic.AddInt32(&botRequests, 1)
+		}
+		writer.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	scraper := NewGeneralScraper(newTestWebFetcher())
+	targetURL := server.URL + "/blocked"
+	scrapeTarget, parseErr := domain.NewScrapeTarget(targetURL)
+	if parseErr != nil {
+		t.Fatalf("failed to parse target URL: %v", parseErr)
+	}
+	summary, err := scraper.Scrape(context.Background(), scrapeTarget)
+	if err != nil {
+		t.Fatalf("scrape should not return error on 403: %v", err)
+	}
+	// 403 should not be retried; scraper returns a summary with minimal data (favicon fallback)
+	if summary == nil {
+		t.Fatalf("expected non-nil summary on 403 (favicon fallback)")
+	}
+	if atomic.LoadInt32(&botRequests) != 0 {
+		t.Fatalf("expected no bot retry on 403, got %d", atomic.LoadInt32(&botRequests))
+	}
+}
+
+func TestGeneralScraperDoesNotRetryOnTooManyRequests(t *testing.T) {
+	var botRequests int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		userAgent := request.Header.Get("User-Agent")
+		if strings.Contains(userAgent, "Discordbot") {
+			atomic.AddInt32(&botRequests, 1)
+		}
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	scraper := NewGeneralScraper(newTestWebFetcher())
+	targetURL := server.URL + "/blocked"
+	scrapeTarget, parseErr := domain.NewScrapeTarget(targetURL)
+	if parseErr != nil {
+		t.Fatalf("failed to parse target URL: %v", parseErr)
+	}
+	summary, err := scraper.Scrape(context.Background(), scrapeTarget)
+	if err != nil {
+		t.Fatalf("scrape should not return error on 429: %v", err)
+	}
+	// 429 should not be retried; scraper returns a summary with minimal data (favicon fallback)
+	if summary == nil {
+		t.Fatalf("expected non-nil summary on 429 (favicon fallback)")
+	}
+	if atomic.LoadInt32(&botRequests) != 0 {
+		t.Fatalf("expected no bot retry on 429, got %d", atomic.LoadInt32(&botRequests))
 	}
 }

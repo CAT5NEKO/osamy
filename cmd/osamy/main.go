@@ -18,6 +18,14 @@ import (
 	"github.com/user/osamy/internal/interfaces"
 )
 
+func parseIntEnv(key string, defaultVal int) int {
+	val, err := strconv.Atoi(os.Getenv(key))
+	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
 func main() {
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -40,14 +48,27 @@ func main() {
 		cacheRepository = infrastructure.NewRedisCacheRepository(redisClient, 24*time.Hour)
 	}
 
-	scrapeTimeoutMs, parseError := strconv.Atoi(os.Getenv("SCRAPE_TIMEOUT_MS"))
-	if parseError != nil {
-		scrapeTimeoutMs = 10000
-	}
+	scrapeTimeoutMs := parseIntEnv("SCRAPE_TIMEOUT_MS", 10000)
+	maxConcurrency := parseIntEnv("MAX_CONCURRENCY", 10)
+	perDomainMaxConcurrency := parseIntEnv("PER_DOMAIN_MAX_CONCURRENCY", 5)
+	domainCooldownSeconds := parseIntEnv("DOMAIN_COOLDOWN_SECONDS", 30)
+
+	domainRateLimiter := infrastructure.NewDomainRateLimiter(
+		perDomainMaxConcurrency,
+		time.Duration(domainCooldownSeconds)*time.Second,
+	)
+
+	safeTransport := infrastructure.NewSafeHttpTransport()
+	rateLimitAwareTransport := infrastructure.NewRateLimitAwareTransport(
+		safeTransport,
+		func(host string) {
+			domainRateLimiter.ReportRateLimited(host)
+		},
+	)
 
 	httpClient := &http.Client{
 		Timeout:       time.Duration(scrapeTimeoutMs) * time.Millisecond,
-		Transport:     infrastructure.NewSafeHttpTransport(),
+		Transport:     rateLimitAwareTransport,
 		CheckRedirect: infrastructure.NewSafeRedirectPolicy(),
 	}
 	webFetcher := infrastructure.NewWebFetcher(httpClient)
@@ -65,12 +86,7 @@ func main() {
 		infrastructure.NewGeneralScraper(webFetcher),
 	}
 
-	maxConcurrency, parseError := strconv.Atoi(os.Getenv("MAX_CONCURRENCY"))
-	if parseError != nil {
-		maxConcurrency = 10
-	}
-
-	summaryService := application.NewSummaryApplicationService(scrapers, cacheRepository, maxConcurrency)
+	summaryService := application.NewSummaryApplicationService(scrapers, cacheRepository, maxConcurrency, domainRateLimiter)
 	summaryHandler := interfaces.NewSummaryHandler(summaryService)
 	healthHandler := interfaces.NewHealthHandler()
 
@@ -129,6 +145,8 @@ func main() {
 	if pprofServer != nil {
 		_ = pprofServer.Close()
 	}
+
+	domainRateLimiter.Stop()
 
 	log.Printf("Server stopped")
 }
