@@ -74,7 +74,7 @@ func main() {
 	summaryHandler := interfaces.NewSummaryHandler(summaryService)
 	healthHandler := interfaces.NewHealthHandler()
 
-	rateLimiter := interfaces.NewRateLimiter(60, 1*time.Minute)
+	rateLimiter := interfaces.NewRateLimiter(600, 1*time.Minute)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", rateLimiter.Middleware(summaryHandler))

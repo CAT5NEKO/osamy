@@ -37,7 +37,11 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, url st
 		return nil, err
 	}
 
-	service.semaphore <- struct{}{}
+	select {
+	case service.semaphore <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	defer func() { <-service.semaphore }()
 
 	for _, scraper := range service.scrapers {

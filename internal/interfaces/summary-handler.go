@@ -52,6 +52,7 @@ func (handler *SummaryHandler) ServeHTTP(writer http.ResponseWriter, request *ht
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "public, max-age=3600")
 	if encodeError := json.NewEncoder(writer).Encode(pageSummary); encodeError != nil {
 		log.Printf("JSON encode failed: %v", encodeError)
 	}
@@ -61,5 +62,5 @@ func (handler *SummaryHandler) setSecurityHeaders(writer http.ResponseWriter) {
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.Header().Set("X-Frame-Options", "DENY")
 	writer.Header().Set("Content-Security-Policy", "default-src 'none'")
-	writer.Header().Set("Cache-Control", "public, max-age=3600")
+	writer.Header().Set("Cache-Control", "no-cache")
 }
