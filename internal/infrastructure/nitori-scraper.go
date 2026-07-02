@@ -44,7 +44,7 @@ func (scraper *NitoriScraper) Scrape(ctx context.Context, target *domain.ScrapeT
 	productCode := extractNitoriProductCode(target.Path())
 	if productCode != "" {
 		summary, apiError := scraper.scrapeViaApi(ctx, target.RawURL(), productCode)
-		if apiError == nil && summary != nil {
+		if apiError == nil && summary != nil && summary.Thumbnail != "" {
 			return summary, nil
 		}
 		log.Printf("Nitori API failed for %s: %v, falling back to HTML", target.RawURL(), apiError)
@@ -183,31 +183,7 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 }
 
 func resolveNitoriImage(document *goquery.Document, baseUrl string) string {
-	image := document.Find(".p-product-image img").First().AttrOr("src", "")
-	if image == "" {
-		image = document.Find(".ph-item-img--main img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-introduction-block img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-hero img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-product-image-block img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-product-slider img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".itemImg img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".c-product-gallery img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "property", "og:image")
-	}
+	image := ExtractMeta(document, "property", "og:image")
 	if image == "" {
 		image = ExtractMeta(document, "property", "og:image:secure_url")
 	}
@@ -228,6 +204,30 @@ func resolveNitoriImage(document *goquery.Document, baseUrl string) string {
 	}
 	if image == "" {
 		image = ExtractLink(document, "image_src")
+	}
+	if image == "" {
+		image = document.Find(".p-product-image img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".ph-item-img--main img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-introduction-block img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-hero img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-product-image-block img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".p-product-slider img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".itemImg img").First().AttrOr("src", "")
+	}
+	if image == "" {
+		image = document.Find(".c-product-gallery img").First().AttrOr("src", "")
 	}
 	return ResolveRelativeUrl(baseUrl, image)
 }

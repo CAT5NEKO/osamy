@@ -80,6 +80,9 @@ func EnsureAbsoluteUrl(targetUrl string, defaultOrigin string) string {
 	if strings.HasPrefix(targetUrl, "//") {
 		return "https:" + targetUrl
 	}
+	if !strings.HasPrefix(targetUrl, "/") {
+		targetUrl = "/" + targetUrl
+	}
 	return defaultOrigin + targetUrl
 }
 
