@@ -97,6 +97,9 @@ func (scraper *TwitterScraper) scrapeViaFxTwitter(ctx context.Context, target *d
 	}
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }
 

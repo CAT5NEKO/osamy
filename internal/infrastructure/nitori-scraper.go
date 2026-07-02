@@ -137,6 +137,9 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 	}
 
 	summary.Finalize()
+	if IsContentEmpty(summary) {
+		return nil, nil
+	}
 	return summary, nil
 }
 
@@ -170,13 +173,12 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 	image := resolveNitoriImage(document, targetUrl)
 	pageSummary.SetThumbnail(image)
 
-	icon := scraper.extractNitoriIcon(document)
-	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, icon))
-	if pageSummary.Icon == "" {
-		pageSummary.SetIcon("https://www.nitori-net.jp/favicon.ico")
-	}
+	pageSummary.SetIcon(ResolveRelativeUrl(targetUrl, scraper.extractNitoriIcon(document)))
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }
 

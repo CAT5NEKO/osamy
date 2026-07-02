@@ -193,9 +193,8 @@ func TestGeneralScraperDoesNotRetryOnForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scrape should not return error on 403: %v", err)
 	}
-	// 403 should not be retried; scraper returns a summary with minimal data (favicon fallback)
-	if summary == nil {
-		t.Fatalf("expected non-nil summary on 403 (favicon fallback)")
+	if summary != nil {
+		t.Fatalf("expected nil summary on 403 (no content)")
 	}
 	if atomic.LoadInt32(&botRequests) != 0 {
 		t.Fatalf("expected no bot retry on 403, got %d", atomic.LoadInt32(&botRequests))
@@ -224,9 +223,8 @@ func TestGeneralScraperDoesNotRetryOnTooManyRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scrape should not return error on 429: %v", err)
 	}
-	// 429 should not be retried; scraper returns a summary with minimal data (favicon fallback)
-	if summary == nil {
-		t.Fatalf("expected non-nil summary on 429 (favicon fallback)")
+	if summary != nil {
+		t.Fatalf("expected nil summary on 429 (no content)")
 	}
 	if atomic.LoadInt32(&botRequests) != 0 {
 		t.Fatalf("expected no bot retry on 429, got %d", atomic.LoadInt32(&botRequests))

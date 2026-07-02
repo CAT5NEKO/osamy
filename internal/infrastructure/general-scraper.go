@@ -64,8 +64,8 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 	defer response.Body.Close()
 
 	contentKind := DetectContentKind(response, target.RawURL())
-	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet || contentKind == ContentKindWord {
-		return BuildFilePreviewSummary(target.RawURL(), response), nil
+	if contentKind == ContentKindPDF || contentKind == ContentKindSpreadsheet || contentKind == ContentKindWord || contentKind == ContentKindFile {
+		return BuildFilePreviewSummary(target.RawURL(), response, contentKind), nil
 	}
 
 	document, parseError := BuildDocumentFromResponse(response)
@@ -144,9 +144,10 @@ func (scraper *GeneralScraper) Scrape(ctx context.Context, target *domain.Scrape
 	pageSummary.SetSiteName(siteName)
 
 	icon := scraper.extractIcon(document)
-	pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), icon))
-	if pageSummary.Icon == "" {
-		pageSummary.SetIcon(ResolveRelativeUrl(target.RawURL(), "/favicon.ico"))
+	resolvedIcon := ResolveRelativeUrl(target.RawURL(), icon)
+	pageSummary.SetIcon(resolvedIcon)
+	if pageSummary.Thumbnail == "" && pageSummary.Icon != "" {
+		pageSummary.SetThumbnail(pageSummary.Icon)
 	}
 
 	videoURL := ExtractMeta(document, "property", "og:video:url")

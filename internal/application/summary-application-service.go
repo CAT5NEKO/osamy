@@ -1,4 +1,4 @@
-package application
+package 	application
 
 import (
 	"context"
@@ -81,7 +81,7 @@ func (service *SummaryApplicationService) GetSummary(ctx context.Context, urlStr
 	}
 	defer func() { <-service.semaphore }()
 
-	result := service.fetchURL(urlStr)
+	result := service.fetchURL(ctx, urlStr)
 
 	entry.result = result
 	close(entry.done)
@@ -103,7 +103,7 @@ func extractHost(rawURL string) (string, error) {
 	return parsed.Host, nil
 }
 
-func (service *SummaryApplicationService) fetchURL(url string) *domain.PageSummary {
+func (service *SummaryApplicationService) fetchURL(ctx context.Context, url string) *domain.PageSummary {
 	scrapeTarget, err := domain.NewScrapeTarget(url)
 	if err != nil {
 		return nil
@@ -111,10 +111,10 @@ func (service *SummaryApplicationService) fetchURL(url string) *domain.PageSumma
 
 	for _, scraper := range service.scrapers {
 		if scraper.CanHandle(scrapeTarget) {
-			scrapedSummary, scrapeError := safeScrape(scraper, context.Background(), scrapeTarget)
+			scrapedSummary, scrapeError := safeScrape(scraper, ctx, scrapeTarget)
 			if scrapeError != nil {
-				log.Printf("Scraper failed for %s: %v", url, scrapeError)
-				return nil
+				log.Printf("Scraper failed for %s: %v, trying next scraper", url, scrapeError)
+				continue
 			}
 			if scrapedSummary != nil {
 				return scrapedSummary

@@ -79,5 +79,8 @@ func (scraper *YouTubeScraper) Scrape(ctx context.Context, target *domain.Scrape
 	}
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }

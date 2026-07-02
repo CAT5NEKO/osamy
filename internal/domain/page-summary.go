@@ -1,9 +1,37 @@
 package domain
 
-import "strings"
+import (
+	"net/url"
+	"path"
+	"strings"
+)
+
+const MaxDataUrlLength = 10 * 1024
+
+func SanitizeUrl(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return ""
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return trimmed
+	case "data":
+		if len(trimmed) > MaxDataUrlLength {
+			return ""
+		}
+		return trimmed
+	default:
+		return ""
+	}
+}
 
 type PlayerInfo struct {
-	Url    string   `json:"url"`
+	Url    *string  `json:"url,omitempty"`
 	Width  int      `json:"width"`
 	Height int      `json:"height"`
 	Allow  []string `json:"allow,omitempty"`
@@ -11,10 +39,10 @@ type PlayerInfo struct {
 
 type PageSummary struct {
 	Title       string      `json:"title"`
-	Icon        string      `json:"icon"`
+	Icon        string      `json:"icon,omitempty"`
 	SiteName    string      `json:"siteName"`
 	Sitename    string      `json:"sitename"`
-	Thumbnail   string      `json:"thumbnail"`
+	Thumbnail   string      `json:"thumbnail,omitempty"`
 	Description string      `json:"description"`
 	Url         string      `json:"url"`
 	Sensitive   bool        `json:"sensitive,omitempty"`
@@ -39,16 +67,26 @@ func (summary *PageSummary) SetDescription(description string) {
 
 func (summary *PageSummary) SetIcon(icon string) {
 	trimmed := strings.TrimSpace(icon)
-	if trimmed != "" {
-		summary.Icon = trimmed
+	if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") && !strings.HasPrefix(trimmed, "data:") {
+		return
 	}
+	summary.Icon = trimmed
+}
+
+func isThumbnailableUrl(rawURL string) bool {
+	ext := strings.ToLower(path.Ext(rawURL))
+	return ext != ".ico" && ext != ".cur"
 }
 
 func (summary *PageSummary) SetThumbnail(thumbnail string) {
 	trimmed := strings.TrimSpace(thumbnail)
-	if trimmed != "" {
-		summary.Thumbnail = trimmed
+	if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+		return
 	}
+	if !isThumbnailableUrl(trimmed) {
+		return
+	}
+	summary.Thumbnail = trimmed
 }
 
 func (summary *PageSummary) SetSiteName(siteName string) {
@@ -67,7 +105,7 @@ func (summary *PageSummary) SetPlayer(playerUrl string, width, height int) {
 	if summary.Player == nil {
 		summary.Player = &PlayerInfo{}
 	}
-	summary.Player.Url = playerUrl
+	summary.Player.Url = &playerUrl
 	summary.Player.Width = width
 	summary.Player.Height = height
 }
@@ -84,7 +122,17 @@ func (summary *PageSummary) Finalize() {
 		summary.Sitename = summary.SiteName
 	}
 	if summary.Player == nil {
-		summary.Player = &PlayerInfo{Url: ""}
+		summary.Player = &PlayerInfo{}
+	}
+	summary.Icon = SanitizeUrl(summary.Icon)
+	summary.Thumbnail = SanitizeUrl(summary.Thumbnail)
+	if summary.Player.Url != nil {
+		sanitized := SanitizeUrl(*summary.Player.Url)
+		if sanitized == "" {
+			summary.Player.Url = nil
+		} else {
+			summary.Player.Url = &sanitized
+		}
 	}
 	summary.ensureMediasConsistency()
 }
@@ -93,17 +141,21 @@ func (summary *PageSummary) ensureMediasConsistency() {
 	if summary.Medias == nil {
 		summary.Medias = []string{}
 	}
+	sanitizedMedias := []string{}
+	seen := map[string]bool{}
+	for _, media := range summary.Medias {
+		sanitized := SanitizeUrl(media)
+		if sanitized == "" || seen[sanitized] {
+			continue
+		}
+		seen[sanitized] = true
+		sanitizedMedias = append(sanitizedMedias, sanitized)
+	}
+	summary.Medias = sanitizedMedias
+
 	if summary.Thumbnail == "" {
 		return
 	}
-	filteredMedias := []string{}
-	for _, media := range summary.Medias {
-		if strings.TrimSpace(media) != "" {
-			filteredMedias = append(filteredMedias, media)
-		}
-	}
-	summary.Medias = filteredMedias
-
 	for _, existingMedia := range summary.Medias {
 		if existingMedia == summary.Thumbnail {
 			return

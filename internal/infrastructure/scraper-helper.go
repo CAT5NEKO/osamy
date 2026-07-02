@@ -18,6 +18,14 @@ import (
 	"golang.org/x/text/transform"
 )
 
+const (
+	PdfIconDataUrl  = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjZDk1MzRmIiBkPSJNMiAxaDdsNSA1djlIMnoiLz48dGV4dCB4PSIyLjUiIHk9IjEzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSI1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPlBERjwvdGV4dD48L3N2Zz4="
+	WordIconDataUrl = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjMmI1Nzk3IiBkPSJNMiAxaDdsNSA1djlIMnoiLz48dGV4dCB4PSIyLjUiIHk9IjEzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSI0IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkRPQzwvdGV4dD48L3N2Zz4="
+	ExcelIconDataUrl = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjMjE3MzQ2IiBkPSJNMiAxaDdsNSA1djlIMnoiLz48dGV4dCB4PSIyLjUiIHk9IjEzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSI0LjUiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSJ3aGl0ZSI+WExTPC90ZXh0Pjwvc3ZnPg=="
+	PptIconDataUrl  = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjZDI0NzI2IiBkPSJNMiAxaDdsNSA1djlIMnoiLz48dGV4dCB4PSIyLjUiIHk9IjEzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSI0IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPlBQVDwvdGV4dD48L3N2Zz4="
+	FileIconDataUrl = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjNjY2IiBkPSJNMiAxaDdsNSA1djlIMnoiLz48dGV4dCB4PSIyLjUiIHk9IjEyIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSI2IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkY8L3RleHQ+PC9zdmc+"
+)
+
 var htmlTagPattern = regexp.MustCompile("<[^>]*>")
 
 type ContentKind string
@@ -27,6 +35,7 @@ const (
 	ContentKindPDF         ContentKind = "pdf"
 	ContentKindSpreadsheet ContentKind = "spreadsheet"
 	ContentKindWord        ContentKind = "word"
+	ContentKindFile        ContentKind = "file"
 )
 
 func StripHtmlTags(input string) string {
@@ -55,11 +64,11 @@ func ResolveRelativeUrl(baseUrl string, relativeUrl string) string {
 	}
 	parsedBase, parseError := url.Parse(baseUrl)
 	if parseError != nil {
-		return relativeUrl
+		return ""
 	}
 	parsedRelative, parseError := url.Parse(relativeUrl)
 	if parseError != nil {
-		return relativeUrl
+		return ""
 	}
 	return parsedBase.ResolveReference(parsedRelative).String()
 }
@@ -91,6 +100,8 @@ func DetectContentKind(response *http.Response, targetURL string) ContentKind {
 		return ContentKindSpreadsheet
 	case "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
 		return ContentKindWord
+	case "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return ContentKindFile
 	}
 
 	extension := extractFileExtension(targetURL, response)
@@ -101,24 +112,56 @@ func DetectContentKind(response *http.Response, targetURL string) ContentKind {
 		return ContentKindSpreadsheet
 	case ".doc", ".docx":
 		return ContentKindWord
+	case ".ppt", ".pptx":
+		return ContentKindFile
+	}
+
+	if isNonHtmlContentType(mediaType) {
+		return ContentKindFile
+	}
+
+	return ContentKindHTML
+}
+
+func isNonHtmlContentType(mediaType string) bool {
+	if mediaType == "" {
+		return false
+	}
+	if strings.HasPrefix(mediaType, "text/") {
+		return false
+	}
+	return mediaType != "text/html" && mediaType != "application/xhtml+xml" &&
+		mediaType != "application/xml" && mediaType != "application/json"
+}
+
+func fileIconForKind(contentKind ContentKind) string {
+	switch contentKind {
+	case ContentKindPDF:
+		return PdfIconDataUrl
+	case ContentKindWord:
+		return WordIconDataUrl
+	case ContentKindSpreadsheet:
+		return ExcelIconDataUrl
+	case ContentKindFile:
+		return PptIconDataUrl
 	default:
-		return ContentKindHTML
+		return FileIconDataUrl
 	}
 }
 
-func BuildFilePreviewSummary(targetURL string, response *http.Response) *domain.PageSummary {
+func BuildFilePreviewSummary(targetURL string, response *http.Response, contentKind ContentKind) *domain.PageSummary {
 	pageSummary := domain.NewPageSummary(targetURL)
 	pageSummary.SetTitle(resolveFileTitle(targetURL, response))
-	pageSummary.SetDescription(resolveFileDescription(response))
+	pageSummary.SetDescription(resolveFileDescription(response, targetURL, contentKind))
 	pageSummary.SetSiteName(resolveFileSiteName(targetURL, response))
-	pageSummary.SetIcon(resolveFileIcon(targetURL, response))
+	pageSummary.SetIcon(fileIconForKind(contentKind))
 	pageSummary.Finalize()
 	return pageSummary
 }
 
 func resolveFileIcon(targetURL string, response *http.Response) string {
 	parsedURL := resolveURLForFile(targetURL, response)
-	if parsedURL == nil {
+	if parsedURL == nil || parsedURL.Hostname() == "" {
 		return ""
 	}
 	return fmt.Sprintf("https://%s/favicon.ico", parsedURL.Hostname())
@@ -145,12 +188,61 @@ func resolveFileTitle(targetURL string, response *http.Response) string {
 	return targetURL
 }
 
-func resolveFileDescription(response *http.Response) string {
+func resolveFileDescription(response *http.Response, targetURL string, contentKind ContentKind) string {
 	mediaType := normalizeMediaType(response.Header.Get("Content-Type"))
-	if mediaType == "" {
-		return "binary file"
+	if friendly := resolveFileFriendlyDescription(mediaType, targetURL); friendly != "" {
+		return friendly
 	}
-	return mediaType
+	if mediaType != "" {
+		return mediaType
+	}
+	return "binary file"
+}
+
+func resolveFileFriendlyDescription(mediaType string, targetURL string) string {
+	if friendly, ok := mimeTypeFriendlyNames[mediaType]; ok {
+		return friendly
+	}
+	extension := strings.ToLower(path.Ext(targetURL))
+	if friendly, ok := extensionFriendlyNames[extension]; ok {
+		return friendly
+	}
+	return ""
+}
+
+var mimeTypeFriendlyNames = map[string]string{
+	"application/pdf":                                                     "PDF Document",
+	"application/msword":                                                  "Word Document",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word Document",
+	"application/vnd.ms-excel":                                            "Excel Spreadsheet",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":   "Excel Spreadsheet",
+	"application/vnd.ms-powerpoint":                                       "PowerPoint Presentation",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint Presentation",
+	"application/octet-stream":                                            "Binary File",
+	"text/plain":                                                          "Text File",
+	"text/csv":                                                            "CSV Spreadsheet",
+	"application/zip":                                                     "ZIP Archive",
+	"application/gzip":                                                    "GZIP Archive",
+	"application/x-rar-compressed":                                        "RAR Archive",
+	"application/x-7z-compressed":                                         "7z Archive",
+	"application/rtf":                                                     "Rich Text Document",
+}
+
+var extensionFriendlyNames = map[string]string{
+	".pdf":   "PDF Document",
+	".doc":   "Word Document",
+	".docx":  "Word Document",
+	".xls":   "Excel Spreadsheet",
+	".xlsx":  "Excel Spreadsheet",
+	".ppt":   "PowerPoint Presentation",
+	".pptx":  "PowerPoint Presentation",
+	".txt":   "Text File",
+	".csv":   "CSV Spreadsheet",
+	".zip":   "ZIP Archive",
+	".gz":    "GZIP Archive",
+	".rar":   "RAR Archive",
+	".7z":    "7z Archive",
+	".rtf":   "Rich Text Document",
 }
 
 func resolveFileSiteName(targetURL string, response *http.Response) string {
@@ -219,6 +311,15 @@ func extractFilenameFromContentDisposition(contentDisposition string) string {
 	return ""
 }
 
+func IsContentEmpty(summary *domain.PageSummary) bool {
+	if summary == nil {
+		return true
+	}
+	return strings.TrimSpace(summary.Title) == "" &&
+		strings.TrimSpace(summary.Description) == "" &&
+		strings.TrimSpace(summary.Thumbnail) == ""
+}
+
 func IsEmptyPreview(summary *domain.PageSummary) bool {
 	if summary == nil {
 		return true
@@ -248,7 +349,7 @@ func IsEmptyPreview(summary *domain.PageSummary) bool {
 			}
 		}
 	}
-	if summary.Player != nil && strings.TrimSpace(summary.Player.Url) != "" {
+	if summary.Player != nil && summary.Player.Url != nil && strings.TrimSpace(*summary.Player.Url) != "" {
 		return false
 	}
 	return true

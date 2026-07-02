@@ -60,5 +60,8 @@ func (scraper *NicoNicoScraper) Scrape(ctx context.Context, target *domain.Scrap
 	}
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }

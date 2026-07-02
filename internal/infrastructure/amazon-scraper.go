@@ -63,5 +63,8 @@ func (scraper *AmazonScraper) Scrape(ctx context.Context, target *domain.ScrapeT
 	pageSummary.SetIcon("https://www.amazon.co.jp/favicon.ico")
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }

@@ -63,5 +63,8 @@ func (scraper *BlueskyScraper) Scrape(ctx context.Context, target *domain.Scrape
 	pageSummary.SetPlayer(videoUrl, 0, 0)
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }

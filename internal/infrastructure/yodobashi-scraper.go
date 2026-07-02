@@ -54,5 +54,8 @@ func (scraper *YodobashiScraper) Scrape(ctx context.Context, target *domain.Scra
 	pageSummary.SetIcon("https://www.yodobashi.com/favicon.ico")
 
 	pageSummary.Finalize()
+	if IsContentEmpty(pageSummary) {
+		return nil, nil
+	}
 	return pageSummary, nil
 }
