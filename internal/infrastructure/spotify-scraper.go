@@ -26,8 +26,11 @@ type spotifyNextData struct {
 			State struct {
 				Data struct {
 					Entity struct {
-						Name           string `json:"name"`
-						Subtitle       string `json:"subtitle"`
+						Name    string `json:"name"`
+						Artists []struct {
+							Name string `json:"name"`
+							URI  string `json:"uri"`
+						} `json:"artists"`
 						VisualIdentity struct {
 							Image []struct {
 								Url string `json:"url"`
@@ -138,11 +141,14 @@ func updateSpotifySummary(pageSummary *domain.PageSummary, response *http.Respon
 
 	entity := nextData.Props.PageProps.State.Data.Entity
 	if entity.Name != "" {
-		title := entity.Name
-		if entity.Subtitle != "" {
-			title += " - " + entity.Subtitle
+		pageSummary.SetTitle(entity.Name)
+	}
+	if len(entity.Artists) > 0 {
+		names := make([]string, len(entity.Artists))
+		for i, a := range entity.Artists {
+			names[i] = a.Name
 		}
-		pageSummary.SetTitle(title)
+		pageSummary.SetDescription(strings.Join(names, ", "))
 	}
 
 	images := entity.VisualIdentity.Image
