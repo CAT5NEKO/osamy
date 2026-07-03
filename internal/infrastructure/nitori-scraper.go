@@ -182,53 +182,34 @@ func (scraper *NitoriScraper) scrapeViaHtml(ctx context.Context, targetUrl strin
 	return pageSummary, nil
 }
 
+func firstNonEmpty(extractors ...func() string) string {
+	for _, ext := range extractors {
+		if s := ext(); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 func resolveNitoriImage(document *goquery.Document, baseUrl string) string {
-	image := ExtractMeta(document, "property", "og:image")
-	if image == "" {
-		image = ExtractMeta(document, "property", "og:image:secure_url")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "property", "og:image:url")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "name", "og:image")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "name", "twitter:image")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "name", "twitter:image:src")
-	}
-	if image == "" {
-		image = ExtractMeta(document, "itemprop", "image")
-	}
-	if image == "" {
-		image = ExtractLink(document, "image_src")
-	}
-	if image == "" {
-		image = document.Find(".p-product-image img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".ph-item-img--main img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-introduction-block img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-hero img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-product-image-block img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".p-product-slider img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".itemImg img").First().AttrOr("src", "")
-	}
-	if image == "" {
-		image = document.Find(".c-product-gallery img").First().AttrOr("src", "")
-	}
+	image := firstNonEmpty(
+		func() string { return ExtractMeta(document, "property", "og:image") },
+		func() string { return ExtractMeta(document, "property", "og:image:secure_url") },
+		func() string { return ExtractMeta(document, "property", "og:image:url") },
+		func() string { return ExtractMeta(document, "name", "og:image") },
+		func() string { return ExtractMeta(document, "name", "twitter:image") },
+		func() string { return ExtractMeta(document, "name", "twitter:image:src") },
+		func() string { return ExtractMeta(document, "itemprop", "image") },
+		func() string { return ExtractLink(document, "image_src") },
+		func() string { return document.Find(".p-product-image img").First().AttrOr("src", "") },
+		func() string { return document.Find(".ph-item-img--main img").First().AttrOr("src", "") },
+		func() string { return document.Find(".p-introduction-block img").First().AttrOr("src", "") },
+		func() string { return document.Find(".p-hero img").First().AttrOr("src", "") },
+		func() string { return document.Find(".p-product-image-block img").First().AttrOr("src", "") },
+		func() string { return document.Find(".p-product-slider img").First().AttrOr("src", "") },
+		func() string { return document.Find(".itemImg img").First().AttrOr("src", "") },
+		func() string { return document.Find(".c-product-gallery img").First().AttrOr("src", "") },
+	)
 	return ResolveRelativeUrl(baseUrl, image)
 }
 
