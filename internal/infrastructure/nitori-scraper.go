@@ -55,9 +55,14 @@ func (scraper *NitoriScraper) Scrape(ctx context.Context, target *domain.ScrapeT
 
 func extractNitoriProductCode(urlPath string) string {
 	pathParts := strings.Split(strings.Trim(urlPath, "/"), "/")
+	for i, part := range pathParts {
+		if part == "product" && i+1 < len(pathParts) {
+			return pathParts[i+1]
+		}
+	}
 	if len(pathParts) > 0 {
 		lastPart := pathParts[len(pathParts)-1]
-		if len(lastPart) >= 8 {
+		if len(lastPart) >= 6 {
 			return lastPart
 		}
 	}
