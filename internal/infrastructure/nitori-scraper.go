@@ -132,8 +132,6 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 	}
 	summary.SetDescription(description)
 
-	summary.SetIcon("https://www.nitori-net.jp/favicon.ico")
-
 	summary.Finalize()
 	if IsContentEmpty(summary) {
 		return nil, nil
