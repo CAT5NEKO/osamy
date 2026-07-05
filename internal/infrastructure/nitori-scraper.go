@@ -44,7 +44,7 @@ func (scraper *NitoriScraper) Scrape(ctx context.Context, target *domain.ScrapeT
 	productCode := extractNitoriProductCode(target.Path())
 	if productCode != "" {
 		summary, apiError := scraper.scrapeViaApi(ctx, target.RawURL(), productCode)
-		if apiError == nil && summary != nil && summary.Thumbnail != "" {
+		if apiError == nil && summary != nil && summary.Title != "" {
 			return summary, nil
 		}
 		log.Printf("Nitori API failed for %s: %v, falling back to HTML", target.RawURL(), apiError)
@@ -122,7 +122,6 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 	summary := domain.NewPageSummary(targetUrl)
 	summary.SetTitle(apiResponse.SkuData.Name)
 	summary.SetSiteName("ニトリネット")
-	summary.SetIcon("https://www.nitori-net.jp/favicon.ico")
 
 	description := StripHtmlTags(apiResponse.SkuData.CatchCopy)
 	if apiResponse.Price.Value > 0 {
@@ -133,13 +132,7 @@ func (scraper *NitoriScraper) scrapeViaApi(ctx context.Context, targetUrl, produ
 	}
 	summary.SetDescription(description)
 
-	nitoriOrigin := "https://www.nitori-net.jp"
-	if len(apiResponse.SkuData.MediasList) > 0 {
-		summary.SetThumbnail(EnsureAbsoluteUrl(apiResponse.SkuData.MediasList[0].URL, nitoriOrigin))
-		for _, media := range apiResponse.SkuData.MediasList {
-			summary.Medias = append(summary.Medias, EnsureAbsoluteUrl(media.URL, nitoriOrigin))
-		}
-	}
+	summary.SetIcon("https://www.nitori-net.jp/favicon.ico")
 
 	summary.Finalize()
 	if IsContentEmpty(summary) {
